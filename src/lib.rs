@@ -3,6 +3,8 @@ use std::time::Duration;
 
 extern crate serde;
 
+extern crate bytes;
+
 extern crate structopt;
 
 extern crate humantime;
@@ -15,11 +17,11 @@ use dsf_core::types::DataKind;
 use dsf_core::api::{ServiceHandle, Create as _, Locate as _, Subscribe as _, Publish as _, Register as _};
 
 extern crate dsf_client;
-use dsf_client::{Client, Error};
+use dsf_client::Client;
+pub use dsf_client::Error;
 
 extern crate dsf_rpc;
 use dsf_rpc::{self as rpc, ServiceInfo, PublishInfo, LocateInfo};
-//use dsf_rpc::
 
 pub mod endpoint;
 
@@ -32,12 +34,14 @@ pub const IOT_SERVICE_PAGE_KIND: u16 = 1;
 pub const IOT_DATA_PAGE_KIND: u16 = 2;
 
 
+/// IotClient wraps a `dsf_client::Client` and provides interfaces to interact with DSF-IoT services
 pub struct IotClient {
     client: Client,
 }
 
 
 impl IotClient {
+    /// Create a new DSF-IoT client using the provided path
     pub fn new(path: &str, timeout: Duration) -> Result<Self, Error> {
         let client = Client::new(path, timeout)?;
 
@@ -61,6 +65,7 @@ impl IotClient {
         self.client.create(req).await
     }
 
+    /// Register an existing service in the database
     pub async fn register(&mut self, options: RegisterOptions) -> Result<dsf_rpc::service::RegisterInfo, Error> {
         self.client.register(options).await
     }
@@ -88,7 +93,7 @@ impl IotClient {
     }
 
     /// List known IoT services
-    pub async fn list(&mut self, _options: SearchOptions) -> Result<Vec<ServiceInfo>, Error> {
+    pub async fn list(&mut self, _options: ListOptions) -> Result<Vec<ServiceInfo>, Error> {
         let req = rpc::service::ListOptions {
             application_id: Some(IOT_APP_ID),
         };

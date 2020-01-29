@@ -1,10 +1,9 @@
 
-use std::io;
-
 extern crate structopt;
 use structopt::StructOpt;
 
 extern crate futures;
+use futures::prelude::*;
 
 extern crate async_std;
 use async_std::task;
@@ -19,8 +18,7 @@ extern crate tracing_subscriber;
 use tracing_subscriber::FmtSubscriber;
 use tracing_subscriber::filter::LevelFilter;
 
-
-use dsf_iot::{IotClient, Command};
+use dsf_iot::{IotClient, Command, Error};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "DSF IoT Client", about = "Distributed Service Discovery (DSF) client, used for managing dsf-iot services")]
@@ -41,7 +39,7 @@ struct Config {
     timeout: Duration,
 }
 
-fn main() -> Result<(), io::Error> {
+fn main() {
     // Fetch arguments
     let opts = Config::from_args();
 
@@ -50,29 +48,58 @@ fn main() -> Result<(), io::Error> {
 
     info!("opts: {:?}", opts);
 
-    task::block_on(async {
+    let res: Result<(), Error> = task::block_on(async {
+
         // Create client connector
         debug!("Connecting to client socket: '{}'", &opts.daemon_socket);
         let mut c = match IotClient::new(&opts.daemon_socket, *opts.timeout) {
             Ok(c) => c,
             Err(e) => {
                 error!("Error connecting to daemon on '{}': {:?}", &opts.daemon_socket, e);
-                return
+                return Err(e)
             }
         };
 
         // Execute request and handle response
         match opts.cmd {
             Command::Create(o) => {
-                let res = c.create(o).await;
+                let res = c.create(o).await?;
                 info!("{:?}", res);
             },
-            _ => {
-                error!("Unhandled command: {:?}", opts.cmd);
-            }
+            Command::Register(o) => {
+                let res = c.register(o).await?;
+                info!("{:?}", res);
+            },
+            Command::Publish(o) => {
+                let res = c.publish(o).await?;
+                info!("{:?}", res);
+            },
+            Command::Search(o) => {
+                let res = c.search(o).await?;
+                info!("{:?}", res);
+            },
+            Command::Query(o) => {
+                let res = c.query(o).await?;
+                info!("{:?}", res);
+            },
+            Command::List(o) => {
+                let res = c.list(o).await?;
+                info!("{:?}", res);
+            },
+            Command::Subscribe(o) => {
+                let mut res = c.subscribe(o).await?;
+
+                for i in res.next().await {
+                    info!("{:?}", i);
+                }
+                
+            },
         }
 
+        Ok(())
     });
 
-    Ok(())
+    if let Err(e) = res {
+        error!("{:?}", e);
+    }
 }

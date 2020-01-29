@@ -1,12 +1,13 @@
 
-
 use structopt::StructOpt;
+use humantime::Duration;
 
 use dsf_core::types::{Id};
 use dsf_rpc::ServiceIdentifier;
 use dsf_rpc::service::{try_parse_key_value};
 
-pub use dsf_rpc::service::RegisterOptions;
+pub use dsf_rpc::service::{RegisterOptions};
+use dsf_rpc::{PageBounds, TimeBounds};
 
 use crate::endpoint::*;
 
@@ -36,7 +37,7 @@ pub enum Command {
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct CreateOptions {
-    /// Endpoint kinds
+    /// Service endpoint information
     #[structopt(long, parse(try_from_str=parse_endpoint_kind))]
     pub endpoints: Vec<EndpointKind>,
 
@@ -57,6 +58,14 @@ pub struct CreateOptions {
 pub struct PublishOptions {
     #[structopt(flatten)]
     pub service: ServiceIdentifier,
+
+    /// Measurement values (these must correspond with service endpoints)
+    #[structopt(short, long, parse(try_from_str = parse_endpoint_data))]
+    pub data: Vec<EndpointValue>,
+
+    /// Measurement metadata
+    #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
+    pub metadata: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -70,22 +79,24 @@ pub struct SearchOptions {
 pub struct SubscribeOptions {
     #[structopt(flatten)]
     pub service: ServiceIdentifier,
+
+    /// Subscription expiry
+    #[structopt(long)]
+    pub expiry: Option<Duration>,
 }
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct QueryOptions {
     #[structopt(flatten)]
     pub service: ServiceIdentifier,
+
+    #[structopt(flatten)]
+    pub bounds: TimeBounds,
 }
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct ListOptions {
-    #[structopt(long)]
-    /// Offset in service index
-    pub offset: Option<usize>,
-
-    #[structopt(long)]
-    /// Limit number of returned services
-    pub limit: Option<usize>,
+    #[structopt(flatten)]
+    pub bounds: PageBounds
 }
 
