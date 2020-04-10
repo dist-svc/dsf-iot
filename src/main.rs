@@ -60,10 +60,18 @@ fn main() {
             }
         };
 
-        // Execute request and handle response
+        // Execute commands
         match opts.cmd {
             Command::Create(o) => {
                 let res = c.create(o).await?;
+                info!("{:?}", res);
+            },
+            Command::Locate(o) => {
+                let res = c.search(&o.id).await?;
+                info!("{:?}", res);
+            },
+            Command::List(o) => {
+                let res = c.list(o).await?;
                 info!("{:?}", res);
             },
             Command::Register(o) => {
@@ -74,16 +82,8 @@ fn main() {
                 let res = c.publish(o).await?;
                 info!("{:?}", res);
             },
-            Command::Search(o) => {
-                let res = c.search(o).await?;
-                info!("{:?}", res);
-            },
             Command::Query(o) => {
                 let res = c.query(o).await?;
-                info!("{:?}", res);
-            },
-            Command::List(o) => {
-                let res = c.list(o).await?;
                 info!("{:?}", res);
             },
             Command::Subscribe(o) => {
