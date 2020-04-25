@@ -1,8 +1,6 @@
 
 use structopt::StructOpt;
-use humantime::Duration;
 
-use dsf_core::types::{Id};
 use dsf_rpc::ServiceIdentifier;
 use dsf_rpc::service::{try_parse_key_value};
 
