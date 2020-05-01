@@ -5,6 +5,8 @@ extern crate serde;
 
 extern crate bytes;
 
+extern crate byteorder;
+
 extern crate structopt;
 
 extern crate humantime;
@@ -36,18 +38,9 @@ pub const IOT_DATA_PAGE_KIND: u16 = 2;
 
 
 /// IotClient wraps a `dsf_client::Client` and provides interfaces to interact with DSF-IoT services
-/// TODO: one day this should be an extension trait
+/// TODO: one day this could be an extension trait?
 pub struct IotClient {
     client: Client,
-}
-
-#[cfg(disabled)]
-impl Deref for IotClient {
-    type Item = Client;
-
-    fn deref(&self) -> &Client {
-        self.client
-    }
 }
 
 impl IotClient {

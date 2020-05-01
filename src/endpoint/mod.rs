@@ -1,57 +1,83 @@
 
 use std::str::FromStr;
+use std::io::Cursor;
 
 use serde::{Serialize, Deserialize};
+
+use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
+
+use dsf_core::base::{Parse, Encode};
+use dsf_core::options::{OptionsError, Metadata};
 
 pub mod kinds;
 pub use kinds::*;
 
+pub mod value;
+pub use value::*;
+
+pub enum Options {
+    Descriptor = 1,
+    ValueBool = 2,
+    ValueFloat = 3,
+    ValueString = 4,
+}
+
+pub const ENDPOINT_DESCRIPTOR_LEN: usize = 4;
+
 /// An endpoint descriptor defines the kind of an endpoint
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EndpointDescriptor {
-    /// Index in the IoT service
+    /// Endpoint index
     pub index: u16,
 
     /// Endpoint Data Kind
     pub kind: EndpointKind,
+
+    /// Endpoint metadata
+    pub meta: Vec<Metadata>,
 }
 
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EndpointData {
+    /// Endpoint index
     pub index: u16,
 
+    // Measurement value
     pub value: EndpointValue,
+
+    /// Measurement metadata
+    pub meta: Vec<Metadata>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum EndpointValue {
-    /// Boolean value
-    Bool(bool),
-    /// 32-bit floating point value
-    Float32(f32),
-    /// String value
-    Text(String),
-    /// Raw data value
-    Bytes(Vec<u8>),
+
+impl EndpointDescriptor {
+
+    fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
+        unimplemented!()
+    }
+
+    fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
+        let mut w = Cursor::new(data);
+        
+        w.write_u16::<NetworkEndian>(Options::Descriptor as u16)?;
+        w.write_u16::<NetworkEndian>(u16::from(&self.kind))?;
+
+        
+        w.write(&self.public_key)?;
+
+        Ok(w.position() as usize)
+    }
 }
 
-pub fn parse_endpoint_data(src: &str) -> Result<EndpointValue, String> {
 
-    // first attempt to match bools
-    if src.to_lowercase() == "true" {
-        return Ok(EndpointValue::Bool(true));
-    } else if src == "false" {
-        return Ok(EndpointValue::Bool(false));
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn encode_decode_endpoint_descriptor() {
+
     }
 
-    // Then floats
-    if let Ok(v) = f32::from_str(src) {
-        return Ok(EndpointValue::Float32(v));
-    }
-
-    // TODO: then bytes
-
-    // Then it's probably a string
-    Ok(EndpointValue::Text(src.to_string()))
 }

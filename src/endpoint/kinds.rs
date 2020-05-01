@@ -4,7 +4,7 @@ use std::fmt::Write;
 use serde::{Serialize, Deserialize};
 
 /// Available endpoint descriptors, their names, units, and IDs
-const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
+pub const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
     (EndpointKind::Temperature,     "temperature",  "C",    1),
     (EndpointKind::Humidity,        "humidity",     "% RH", 2),
     (EndpointKind::Pressure,        "pressure", "   kPa",   3),
@@ -26,12 +26,12 @@ pub enum EndpointKind {
 
 /// Parse an endpoint kind from a string
 pub fn parse_endpoint_kind(src: &str) -> Result<EndpointKind, String> {
+    // Coerce to lower case
     let src = src.to_lowercase();
 
     // Attempt to find matching endpoint name
-    let m = ENDPOINT_KINDS.iter().find(|(_k, s, _u, _i)| src == *s );
-    if let Some(e) = m {
-        return Ok(e.0);
+    if let Ok(v) = EndpointKind::from_str(&src) {
+        return Ok(v);
     }
 
     // Attempt to parse as an integer
@@ -54,5 +54,36 @@ impl EndpointKind {
         write!(&mut buff, "RAW_ID (no unit)").unwrap();
 
         buff
+    }
+
+}
+
+impl core::str::FromStr for EndpointKind {
+    type Err = String;
+
+    fn from_str(src: &str) -> Result<Self, Self::Err> {
+        let m = ENDPOINT_KINDS.iter().find(|(_k, s, _u, _i)| src == *s );
+        match m {
+            Some(e) => Ok(e.0),
+            None => Err(format!("No matching endpoint name found"))
+        }
+    }
+}
+
+impl From<&EndpointKind> for u16 {
+    fn from(kind: &EndpointKind) -> u16 {
+        // Handle unknown endpoints
+        if let EndpointKind::Unknown(v) = kind{
+            return *v;
+        }
+
+        // Otherwise match against known endpoint knids
+        for (k, _s, _u, i) in ENDPOINT_KINDS {
+            if k == kind {
+                return *i;
+            }
+        }
+
+        unreachable!()
     }
 }
