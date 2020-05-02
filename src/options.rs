@@ -58,7 +58,7 @@ pub struct PublishOptions {
     pub service: ServiceIdentifier,
 
     /// Measurement values (these must correspond with service endpoints)
-    #[structopt(short, long, parse(try_from_str = parse_endpoint_data))]
+    #[structopt(short, long, parse(try_from_str = parse_endpoint_value))]
     pub data: Vec<EndpointValue>,
 
     /// Measurement metadata

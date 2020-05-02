@@ -62,10 +62,19 @@ impl core::str::FromStr for EndpointKind {
     type Err = String;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
-        let m = ENDPOINT_KINDS.iter().find(|(_k, s, _u, _i)| src == *s );
-        match m {
+        match ENDPOINT_KINDS.iter().find(|(_k, s, _u, _i)| src == *s ) {
             Some(e) => Ok(e.0),
             None => Err(format!("No matching endpoint name found"))
+        }
+    }
+}
+
+impl From<u16> for EndpointKind {
+
+    fn from(v: u16) -> Self {
+        match ENDPOINT_KINDS.iter().find(|(_k, _s, _u, i)| v == *i ) {
+            Some(e) => e.0,
+            None => EndpointKind::Unknown(v),
         }
     }
 }

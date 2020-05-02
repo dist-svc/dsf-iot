@@ -1,11 +1,7 @@
 
 use std::str::FromStr;
 
-use byteorder::NetworkEndian;
 use serde::{Serialize, Deserialize};
-
-use dsf_core::base::{Parse, Encode};
-use dsf_core::options::OptionsError;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EndpointValue {
@@ -19,23 +15,31 @@ pub enum EndpointValue {
     Bytes(Vec<u8>),
 }
 
-pub fn parse_endpoint_data(src: &str) -> Result<EndpointValue, String> {
+impl FromStr for EndpointValue {
+    type Err = String;
 
-    // first attempt to match bools
-    if src.to_lowercase() == "true" {
-        return Ok(EndpointValue::Bool(true));
-    } else if src == "false" {
-        return Ok(EndpointValue::Bool(false));
+    fn from_str(src: &str) -> Result<EndpointValue, Self::Err> {
+        // first attempt to match bools
+        if src.to_lowercase() == "true" {
+            return Ok(EndpointValue::Bool(true));
+        } else if src == "false" {
+            return Ok(EndpointValue::Bool(false));
+        }
+
+        // Then floats
+        if let Ok(v) = f32::from_str(src) {
+            return Ok(EndpointValue::Float32(v));
+        }
+
+        // TODO: then bytes
+
+        // Otherwise it's probably a string
+        Ok(EndpointValue::Text(src.to_string()))
     }
+}
 
-    // Then floats
-    if let Ok(v) = f32::from_str(src) {
-        return Ok(EndpointValue::Float32(v));
-    }
-
-    // TODO: then bytes
-
-    // Then it's probably a string
-    Ok(EndpointValue::Text(src.to_string()))
+/// Helper to parse endpoint data from string values
+pub(crate) fn parse_endpoint_value(src: &str) -> Result<EndpointValue, String> {
+    EndpointValue::from_str(src)   
 }
 
