@@ -1,4 +1,3 @@
-
 extern crate structopt;
 use structopt::StructOpt;
 
@@ -15,18 +14,26 @@ use humantime::Duration;
 extern crate tracing;
 
 extern crate tracing_subscriber;
-use tracing_subscriber::FmtSubscriber;
 use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::FmtSubscriber;
 
-use dsf_iot::{IotClient, Command, Error};
+use dsf_iot::{Command, Error, IotClient};
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "DSF IoT Client", about = "Distributed Service Discovery (DSF) client, used for managing dsf-iot services")]
+#[structopt(
+    name = "DSF IoT Client",
+    about = "Distributed Service Discovery (DSF) client, used for managing dsf-iot services"
+)]
 struct Config {
     #[structopt(subcommand)]
     cmd: Command,
 
-    #[structopt(short = "d", long = "daemon-socket", default_value = "/tmp/dsf.sock", env="DSF_SOCK")]
+    #[structopt(
+        short = "d",
+        long = "daemon-socket",
+        default_value = "/tmp/dsf.sock",
+        env = "DSF_SOCK"
+    )]
     /// Specify the socket to bind the DSF daemon
     daemon_socket: String,
 
@@ -44,19 +51,23 @@ fn main() {
     let opts = Config::from_args();
 
     // Setup logging
-    let _ = FmtSubscriber::builder().with_max_level(opts.level.clone()).try_init();
+    let _ = FmtSubscriber::builder()
+        .with_max_level(opts.level.clone())
+        .try_init();
 
     info!("opts: {:?}", opts);
 
     let res: Result<(), Error> = task::block_on(async {
-
         // Create client connector
         debug!("Connecting to client socket: '{}'", &opts.daemon_socket);
         let mut c = match IotClient::new(&opts.daemon_socket, *opts.timeout) {
             Ok(c) => c,
             Err(e) => {
-                error!("Error connecting to daemon on '{}': {:?}", &opts.daemon_socket, e);
-                return Err(e)
+                error!(
+                    "Error connecting to daemon on '{}': {:?}",
+                    &opts.daemon_socket, e
+                );
+                return Err(e);
             }
         };
 
@@ -65,35 +76,34 @@ fn main() {
             Command::Create(o) => {
                 let res = c.create(o).await?;
                 info!("{:?}", res);
-            },
+            }
             Command::Locate(o) => {
                 let res = c.search(&o.id).await?;
                 info!("{:?}", res);
-            },
+            }
             Command::List(o) => {
                 let res = c.list(o).await?;
                 info!("{:?}", res);
-            },
+            }
             Command::Register(o) => {
                 let res = c.register(o).await?;
                 info!("{:?}", res);
-            },
+            }
             Command::Publish(o) => {
                 let res = c.publish(o).await?;
                 info!("{:?}", res);
-            },
+            }
             Command::Query(o) => {
                 let res = c.query(o).await?;
                 info!("{:?}", res);
-            },
+            }
             Command::Subscribe(o) => {
                 let mut res = c.subscribe(o).await?;
 
                 for i in res.next().await {
                     info!("{:?}", i);
                 }
-                
-            },
+            }
         }
 
         Ok(())

@@ -1,7 +1,6 @@
-
 use std::str::FromStr;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EndpointValue {
@@ -40,6 +39,5 @@ impl FromStr for EndpointValue {
 
 /// Helper to parse endpoint data from string values
 pub(crate) fn parse_endpoint_value(src: &str) -> Result<EndpointValue, String> {
-    EndpointValue::from_str(src)   
+    EndpointValue::from_str(src)
 }
-

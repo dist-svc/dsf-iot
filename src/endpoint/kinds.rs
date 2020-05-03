@@ -1,16 +1,16 @@
-use std::str::FromStr;
 use std::fmt::Write;
+use std::str::FromStr;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
-    (EndpointKind::Temperature,     "temperature",  "C",    1),
-    (EndpointKind::Humidity,        "humidity",     "% RH", 2),
-    (EndpointKind::Pressure,        "pressure", "   kPa",   3),
+    (EndpointKind::Temperature, "temperature", "C", 1),
+    (EndpointKind::Humidity, "humidity", "% RH", 2),
+    (EndpointKind::Pressure, "pressure", "   kPa", 3),
 ];
 
-/// Endpoint Kind specifies the type of IoT endpoint. For example, 
+/// Endpoint Kind specifies the type of IoT endpoint. For example,
 /// Temperature, Heart-Rate
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EndpointKind {
@@ -36,10 +36,14 @@ pub fn parse_endpoint_kind(src: &str) -> Result<EndpointKind, String> {
 
     // Attempt to parse as an integer
     if let Ok(v) = u16::from_str(&src) {
-        return Ok(EndpointKind::Unknown(v))
+        return Ok(EndpointKind::Unknown(v));
     }
-    
-    Err(format!("Unrecognised endpoint kind '{}' (options: {})", src, EndpointKind::variants()))
+
+    Err(format!(
+        "Unrecognised endpoint kind '{}' (options: {})",
+        src,
+        EndpointKind::variants()
+    ))
 }
 
 impl EndpointKind {
@@ -55,24 +59,22 @@ impl EndpointKind {
 
         buff
     }
-
 }
 
 impl core::str::FromStr for EndpointKind {
     type Err = String;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
-        match ENDPOINT_KINDS.iter().find(|(_k, s, _u, _i)| src == *s ) {
+        match ENDPOINT_KINDS.iter().find(|(_k, s, _u, _i)| src == *s) {
             Some(e) => Ok(e.0),
-            None => Err(format!("No matching endpoint name found"))
+            None => Err(format!("No matching endpoint name found")),
         }
     }
 }
 
 impl From<u16> for EndpointKind {
-
     fn from(v: u16) -> Self {
-        match ENDPOINT_KINDS.iter().find(|(_k, _s, _u, i)| v == *i ) {
+        match ENDPOINT_KINDS.iter().find(|(_k, _s, _u, i)| v == *i) {
             Some(e) => e.0,
             None => EndpointKind::Unknown(v),
         }
@@ -82,7 +84,7 @@ impl From<u16> for EndpointKind {
 impl From<&EndpointKind> for u16 {
     fn from(kind: &EndpointKind) -> u16 {
         // Handle unknown endpoints
-        if let EndpointKind::Unknown(v) = kind{
+        if let EndpointKind::Unknown(v) = kind {
             return *v;
         }
 

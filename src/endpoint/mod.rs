@@ -1,11 +1,10 @@
-
 use std::io::{Cursor, Write};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use byteorder::{ByteOrder, NetworkEndian, WriteBytesExt};
 
-use dsf_core::options::{OptionsError, Metadata};
+use dsf_core::options::{Metadata, OptionsError};
 
 pub mod kinds;
 pub use kinds::*;
@@ -14,15 +13,14 @@ pub mod value;
 pub use value::*;
 
 pub mod iot_option_kinds {
-    pub const ENDPOINT_DESCRIPTOR:  u16 = 0x0001 | (1 << 15);
-    pub const VALUE_BOOL_FALSE:     u16 = 0x0002 | (1 << 15);
-    pub const VALUE_BOOL_TRUE:      u16 = 0x0003 | (1 << 15);
-    pub const VALUE_FLOAT:          u16 = 0x0004 | (1 << 15);
-    pub const VALUE_STRING:         u16 = 0x0005 | (1 << 15);
+    pub const ENDPOINT_DESCRIPTOR: u16 = 0x0001 | (1 << 15);
+    pub const VALUE_BOOL_FALSE: u16 = 0x0002 | (1 << 15);
+    pub const VALUE_BOOL_TRUE: u16 = 0x0003 | (1 << 15);
+    pub const VALUE_FLOAT: u16 = 0x0004 | (1 << 15);
+    pub const VALUE_STRING: u16 = 0x0005 | (1 << 15);
 
     pub const ENDPOINT_DESCRIPTOR_LEN: usize = 4;
 }
-
 
 /// An endpoint descriptor defines the kind of an endpoint
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,9 +42,7 @@ pub struct EndpointData {
     pub meta: Vec<Metadata>,
 }
 
-
 impl EndpointDescriptor {
-
     pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
         // Read option header (kind and length)
         if NetworkEndian::read_u16(data) != iot_option_kinds::ENDPOINT_DESCRIPTOR {
@@ -60,15 +56,12 @@ impl EndpointDescriptor {
 
         // TODO: read metadata
 
-        Ok((Self{
-            kind,
-            meta: vec![],
-        }, len as usize))
+        Ok((Self { kind, meta: vec![] }, len as usize))
     }
 
     pub fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
         let mut w = Cursor::new(data);
-        
+
         // Write option header (option kind and length)
         w.write_u16::<NetworkEndian>(iot_option_kinds::ENDPOINT_DESCRIPTOR)?;
         w.write_u16::<NetworkEndian>(iot_option_kinds::ENDPOINT_DESCRIPTOR_LEN as u16)?;
@@ -83,9 +76,7 @@ impl EndpointDescriptor {
     }
 }
 
-
 impl EndpointData {
-
     pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
         use iot_option_kinds::*;
 
@@ -94,61 +85,58 @@ impl EndpointData {
         let len = NetworkEndian::read_u16(&data[2..]);
 
         let value = match kind {
-            VALUE_BOOL_FALSE => {
-                EndpointValue::Bool(false)
-            },
-            VALUE_BOOL_TRUE => {
-                EndpointValue::Bool(true)
-            },
+            VALUE_BOOL_FALSE => EndpointValue::Bool(false),
+            VALUE_BOOL_TRUE => EndpointValue::Bool(true),
             VALUE_FLOAT => {
                 let f = NetworkEndian::read_f32(&data[4..]);
                 EndpointValue::Float32(f)
-            },
+            }
             VALUE_STRING => {
                 let s = std::str::from_utf8(&data[4..]).unwrap();
                 EndpointValue::Text(s.to_owned())
-            },
-            _ => {
-                return Err(OptionsError::InvalidOptionKind)
             }
+            _ => return Err(OptionsError::InvalidOptionKind),
         };
 
         // TODO: read metadata
 
-        Ok((Self{
-            value,
-            meta: vec![],
-        }, len as usize))
+        Ok((
+            Self {
+                value,
+                meta: vec![],
+            },
+            len as usize,
+        ))
     }
 
     pub fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
         use iot_option_kinds::*;
 
         let mut w = Cursor::new(data);
-    
+
         // Write option header and data
         match &self.value {
             EndpointValue::Bool(v) if *v == true => {
                 w.write_u16::<NetworkEndian>(VALUE_BOOL_TRUE)?;
                 w.write_u16::<NetworkEndian>(0)?;
-            },
+            }
             EndpointValue::Bool(v) if *v == false => {
                 w.write_u16::<NetworkEndian>(VALUE_BOOL_FALSE)?;
                 w.write_u16::<NetworkEndian>(0)?;
-            },
+            }
             EndpointValue::Float32(v) => {
                 w.write_u16::<NetworkEndian>(VALUE_FLOAT)?;
                 w.write_u16::<NetworkEndian>(4)?;
                 w.write_f32::<NetworkEndian>(*v)?;
-            },
+            }
             EndpointValue::Text(v) => {
                 let b = v.as_bytes();
 
                 w.write_u16::<NetworkEndian>(VALUE_STRING)?;
                 w.write_u16::<NetworkEndian>(b.len() as u16)?;
                 w.write(b)?;
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
 
         // TODO: write metadata
@@ -157,9 +145,6 @@ impl EndpointData {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,9 +152,18 @@ mod tests {
     #[test]
     fn encode_decode_endpoint_descriptor() {
         let descriptors = vec![
-            EndpointDescriptor{kind: EndpointKind::Temperature, meta: vec![]},
-            EndpointDescriptor{kind: EndpointKind::Pressure, meta: vec![]},
-            EndpointDescriptor{kind: EndpointKind::Humidity, meta: vec![]},
+            EndpointDescriptor {
+                kind: EndpointKind::Temperature,
+                meta: vec![],
+            },
+            EndpointDescriptor {
+                kind: EndpointKind::Pressure,
+                meta: vec![],
+            },
+            EndpointDescriptor {
+                kind: EndpointKind::Humidity,
+                meta: vec![],
+            },
         ];
 
         for descriptor in &descriptors {
@@ -181,7 +175,6 @@ mod tests {
 
             let (d, _n) = EndpointDescriptor::parse(&buff[..n]).expect("Decoding error");
 
-
             assert_eq!(descriptor, &d);
         }
     }
@@ -189,9 +182,18 @@ mod tests {
     #[test]
     fn encode_decode_endpoint_value() {
         let data = vec![
-            EndpointData{value: EndpointValue::Bool(true), meta: vec![]},
-            EndpointData{value: EndpointValue::Bool(false), meta: vec![]},
-            EndpointData{value: EndpointValue::Float32(10.45), meta: vec![]},
+            EndpointData {
+                value: EndpointValue::Bool(true),
+                meta: vec![],
+            },
+            EndpointData {
+                value: EndpointValue::Bool(false),
+                meta: vec![],
+            },
+            EndpointData {
+                value: EndpointValue::Float32(10.45),
+                meta: vec![],
+            },
         ];
 
         for d in &data {

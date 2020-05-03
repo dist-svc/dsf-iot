@@ -1,8 +1,7 @@
-
 use structopt::StructOpt;
 
+use dsf_rpc::service::try_parse_key_value;
 use dsf_rpc::ServiceIdentifier;
-use dsf_rpc::service::{try_parse_key_value};
 
 pub use dsf_rpc::service::{LocateOptions, RegisterOptions, SubscribeOptions};
 use dsf_rpc::{PageBounds, TimeBounds};
@@ -78,6 +77,5 @@ pub struct QueryOptions {
 #[derive(Debug, Clone, StructOpt)]
 pub struct ListOptions {
     #[structopt(flatten)]
-    pub bounds: PageBounds
+    pub bounds: PageBounds,
 }
-
