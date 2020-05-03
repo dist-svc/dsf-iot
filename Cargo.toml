@@ -20,13 +20,10 @@ chrono = "0.4.10"
 byteorder = "1.3.4"
 
 [dependencies.dsf-core]
-path = "../dsf-core"
-version = "*"
+version = "0.1.0"
 
 [dependencies.dsf-rpc]
-path = "../dsf-rpc"
-version = "*"
+version = "0.1.0"
 
 [dependencies.dsf-client]
-path = "../dsf-client"
-version = "*"
+version = "0.1.0"
