@@ -17,7 +17,7 @@ extern crate tracing_subscriber;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_iot::{Command, Error, IotClient};
+use dsf_iot::{Command, IotError, IotClient};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -57,7 +57,7 @@ fn main() {
 
     info!("opts: {:?}", opts);
 
-    let res: Result<(), Error> = task::block_on(async {
+    let res: Result<(), IotError> = task::block_on(async {
         // Create client connector
         debug!("Connecting to client socket: '{}'", &opts.daemon_socket);
         let mut c = match IotClient::new(&opts.daemon_socket, *opts.timeout) {

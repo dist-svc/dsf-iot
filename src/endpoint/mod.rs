@@ -43,6 +43,13 @@ pub struct EndpointData {
 }
 
 impl EndpointDescriptor {
+    pub fn new(kind: EndpointKind, meta: &[Metadata]) -> Self {
+        Self {
+            kind,
+            meta: meta.to_vec(),
+        }
+    }
+
     pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
         // Read option header (kind and length)
         if NetworkEndian::read_u16(data) != iot_option_kinds::ENDPOINT_DESCRIPTOR {
@@ -76,15 +83,29 @@ impl EndpointDescriptor {
     }
 }
 
+pub fn parse_endpoint_descriptor(src: &str) -> Result<EndpointDescriptor, String> {
+    let kind = parse_endpoint_kind(src)?;
+    Ok(EndpointDescriptor::new(kind, &[]))
+}
+
 impl EndpointData {
+    pub fn new(value: EndpointValue, meta: &[Metadata]) -> Self {
+        Self {
+            value,
+            meta: meta.to_vec(),
+        }
+    }
+
     pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
         use iot_option_kinds::*;
+
+        info!("Decoding: {:x?}", data);
 
         // Read option header (kind and length)
         let kind = NetworkEndian::read_u16(&data[0..]);
         let len = NetworkEndian::read_u16(&data[2..]);
 
-        let value = match kind {
+        let value = match (kind) {
             VALUE_BOOL_FALSE => EndpointValue::Bool(false),
             VALUE_BOOL_TRUE => EndpointValue::Bool(true),
             VALUE_FLOAT => {
@@ -95,7 +116,10 @@ impl EndpointData {
                 let s = std::str::from_utf8(&data[4..]).unwrap();
                 EndpointValue::Text(s.to_owned())
             }
-            _ => return Err(OptionsError::InvalidOptionKind),
+            _ => {
+                error!("Unrecognised option kind: 0x{:x?}", kind);
+                return Err(OptionsError::InvalidOptionKind)
+            },
         };
 
         // TODO: read metadata
@@ -105,7 +129,7 @@ impl EndpointData {
                 value,
                 meta: vec![],
             },
-            len as usize,
+            len as usize + 4,
         ))
     }
 
@@ -145,6 +169,11 @@ impl EndpointData {
     }
 }
 
+pub fn parse_endpoint_data(src: &str) -> Result<EndpointData, String> {
+    let value = parse_endpoint_value(src)?;
+    Ok(EndpointData::new(value, &[]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,7 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn encode_decode_endpoint_value() {
+    fn encode_decode_endpoint_data() {
         let data = vec![
             EndpointData {
                 value: EndpointValue::Bool(true),
@@ -207,5 +236,7 @@ mod tests {
 
             assert_eq!(d, &d1);
         }
+
+
     }
 }

@@ -1,6 +1,10 @@
 use std::time::Duration;
+use std::convert::{TryInto};
 
 extern crate serde;
+
+#[macro_use]
+extern crate log;
 
 extern crate bytes;
 
@@ -17,6 +21,8 @@ extern crate dsf_core;
 use dsf_core::api::ServiceHandle;
 use dsf_core::prelude::*;
 use dsf_core::types::DataKind;
+use dsf_core::options::{OptionsError};
+
 
 extern crate dsf_client;
 use dsf_client::prelude::*;
@@ -26,9 +32,13 @@ extern crate dsf_rpc;
 use dsf_rpc::{self as rpc, LocateInfo, PublishInfo, ServiceIdentifier, ServiceInfo};
 
 pub mod endpoint;
+pub use endpoint::*;
 
 pub mod options;
 pub use options::*;
+
+pub mod service;
+pub use service::*;
 
 pub const IOT_APP_ID: u16 = 1;
 
@@ -41,9 +51,27 @@ pub struct IotClient {
     client: Client,
 }
 
+#[derive(Debug)]
+pub enum IotError {
+    Client(ClientError),
+    Options(OptionsError),
+}
+
+impl From<ClientError> for IotError {
+    fn from(e: ClientError) -> Self {
+        Self::Client(e)
+    }
+}
+
+impl From<OptionsError> for IotError {
+    fn from(o: OptionsError) -> Self {
+        Self::Options(o)
+    }
+}
+
 impl IotClient {
     /// Create a new DSF-IoT client using the provided path
-    pub fn new(path: &str, timeout: Duration) -> Result<Self, ClientError> {
+    pub fn new(path: &str, timeout: Duration) -> Result<Self, IotError> {
         let client = Client::new(path, timeout)?;
 
         Ok(Self { client })
@@ -55,71 +83,101 @@ impl IotClient {
     }
 
     /// Create a new IoT service
-    pub async fn create(&mut self, options: CreateOptions) -> Result<ServiceHandle, ClientError> {
-        let req = rpc::service::CreateOptions {
-            application_id: IOT_APP_ID,
-            page_kind: Some(IOT_SERVICE_PAGE_KIND),
-            // TODO: encoded body here
-            body: None,
-            metadata: options.metadata,
-            public: options.public,
-            register: options.register,
-            ..Default::default()
-        };
+    pub async fn create(&mut self, options: CreateOptions) -> Result<ServiceHandle, IotError> {
 
-        self.client.create(req).await
+        info!("Creating service: {:?}", options.service);
+
+        let encoded = options.try_into()?;
+
+        info!("Encoded service info");
+
+        let r = self.client.create(encoded).await?;
+
+        info!("Result: {:?}", r);
+
+        Ok(r)
     }
 
     /// Search for an existing IoT service
-    pub async fn search(&mut self, id: &Id) -> Result<(ServiceHandle, LocateInfo), ClientError> {
-        self.client
+    pub async fn search(&mut self, id: &Id) -> Result<(ServiceHandle, LocateInfo), IotError> {
+        let r = self.client
             .locate(LocateOptions {
                 id: id.clone(),
                 local_only: false,
             })
-            .await
+            .await?;
+        Ok(r)
     }
 
     /// List known IoT services
-    pub async fn list(&mut self, _options: ListOptions) -> Result<Vec<ServiceInfo>, ClientError> {
+    pub async fn list(&mut self, _options: ListOptions) -> Result<Vec<ServiceInfo>, IotError> {
         let req = rpc::service::ListOptions {
             application_id: Some(IOT_APP_ID),
         };
 
-        self.client.list(req).await
+        let r = self.client.list(req).await?;
+        Ok(r)
     }
 
     /// Register an existing service in the database
     pub async fn register(
         &mut self,
         options: RegisterOptions,
-    ) -> Result<dsf_rpc::service::RegisterInfo, ClientError> {
-        self.client.register(options).await
+    ) -> Result<dsf_rpc::service::RegisterInfo, IotError> {
+        let r = self.client.register(options).await?;
+        Ok(r)
     }
 
-    /// Publish an existing IoT service
+    /// Publish raw data using an existing IoT service
     pub async fn publish_raw(
         &mut self,
         service: ServiceIdentifier,
         kind: DataKind,
         data: &[u8],
-    ) -> Result<PublishInfo, ClientError> {
+    ) -> Result<PublishInfo, IotError> {
         let p = dsf_rpc::data::PublishOptions {
             service,
             kind: kind.into(),
             data: Some(data.to_vec()),
         };
 
-        self.client.publish(p).await
+        let r = self.client.publish(p).await?;
+        Ok(r)
     }
 
-    pub async fn publish(&mut self, _options: PublishOptions) -> Result<PublishInfo, ClientError> {
-        unimplemented!()
+    pub async fn publish(&mut self, options: PublishOptions) -> Result<PublishInfo, IotError> {
+        info!("Publishing data: {:?}", options);
+
+        let encoded = options.try_into()?;
+
+        info!("Encoded service data");
+
+        let r = self.client.publish(encoded).await?;
+
+        info!("Result: {:?}", r);
+
+        Ok(r)
     }
 
     /// Query for data from an IoT service
-    pub async fn query(&mut self, _options: QueryOptions) -> Result<ServiceHandle, ClientError> {
-        unimplemented!()
+    pub async fn query(&mut self, options: QueryOptions) -> Result<Vec<IotData>, IotError> {
+        info!("Querying for data: {:?}", options);
+
+        let mut data = self.client.data(options).await?;
+
+        let iot_data = data.drain(..).filter_map(|v| {
+            if let Body::Cleartext(b) = v.body {
+                let d = IotData::decode_data(&b).unwrap();
+
+                // TODO: pass metadata through here
+                return Some(IotData::new(&d, &[]))
+            }
+            None
+        }).collect();
+
+        info!("Result: {:#?}", iot_data);
+
+        Ok(iot_data)
     }
 
     /// Subscribe to data from an IoT service
@@ -132,4 +190,5 @@ impl IotClient {
         // TODO: decode endpoint info here
         Ok(resp.map(|_d| ()))
     }
+
 }
