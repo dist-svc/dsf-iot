@@ -36,8 +36,13 @@ pub enum Command {
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct CreateOptions {
-    #[structopt(flatten)]
-    pub service: IotService,
+    /// Service endpoint information
+    #[structopt(long, parse(try_from_str=parse_endpoint_descriptor))]
+    pub endpoints: Vec<EndpointDescriptor>,
+
+    /// Service metadata
+    #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
+    pub meta: Vec<(String, String)>,
 
     #[structopt(short = "p", long = "public")]
     /// Indicate the service should be public (unencrypted)
@@ -54,13 +59,13 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
     // Generate an RPC create message for an IoT service instance
     fn try_into(self) -> Result<dsf_rpc::CreateOptions, Self::Error> {
 
-        let body = IotService::encode_body(&self.service.endpoints)?;
+        let body = IotService::encode_body(&self.endpoints)?;
 
         let co = dsf_rpc::CreateOptions {
             application_id: IOT_APP_ID,
             page_kind: Some(IOT_SERVICE_PAGE_KIND),
             body: Some(NewBody::Cleartext(body)),
-            metadata: self.service.metadata.clone(),
+            metadata: self.meta.clone(),
             public: self.public,
             register: self.register,
             ..Default::default()
@@ -109,3 +114,7 @@ pub type QueryOptions = dsf_rpc::data::ListOptions;
 
 /// ListOptions used to list known iot services
 pub type ListOptions = dsf_rpc::service::ListOptions;
+
+
+/// InfoOptions used to fetch info for services
+pub type InfoOptions = dsf_rpc::service::InfoOptions;

@@ -51,11 +51,16 @@ impl EndpointDescriptor {
     }
 
     pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
+        trace!("Parsing: {:x?}", data);
+
         // Read option header (kind and length)
-        if NetworkEndian::read_u16(data) != iot_option_kinds::ENDPOINT_DESCRIPTOR {
+        let option_kind = NetworkEndian::read_u16(data);
+
+        if option_kind != iot_option_kinds::ENDPOINT_DESCRIPTOR {
+            warn!("Unrecognised option kind: {}", option_kind);
             return Err(OptionsError::InvalidOptionKind);
         }
-        let len = NetworkEndian::read_u16(&data[2..]);
+        let len = NetworkEndian::read_u16(&data[2..]) + 4;
 
         // Parse out endpoint index and kind
         let kind = NetworkEndian::read_u16(&data[4..]).into();

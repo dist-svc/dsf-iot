@@ -1,11 +1,12 @@
+use std::convert::TryFrom;
 
 use structopt::StructOpt;
-use bytes::BytesMut;
 
-use dsf_rpc::service::{CreateOptions, try_parse_key_value};
-use dsf_rpc::data::{PublishOptions};
+use dsf_rpc::service::{ServiceInfo, try_parse_key_value};
+use dsf_rpc::data::{DataInfo};
 
-use dsf_core::base::NewBody;
+use dsf_core::types::*;
+use dsf_core::base::{Body};
 
 use crate::IotError;
 use crate::endpoint::*;
@@ -19,13 +20,43 @@ pub const IOT_DATA_PAGE_KIND: u16 = 2;
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct IotService {
+    pub id: Id,
+
+    pub secret_key: Option<SecretKey>,
+
     /// Service endpoint information
     #[structopt(long, parse(try_from_str=parse_endpoint_descriptor))]
     pub endpoints: Vec<EndpointDescriptor>,
 
     /// Service metadata
     #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
-    pub metadata: Vec<(String, String)>,
+    pub meta: Vec<(String, String)>,
+}
+
+
+impl TryFrom<ServiceInfo> for IotService {
+    type Error = IotError;
+
+    fn try_from(mut i: ServiceInfo) -> Result<IotService, IotError> {
+        
+        i.body.decrypt(i.secret_key.as_ref()).unwrap();
+
+        let endpoints = match &i.body {
+            Body::Cleartext(b) => IotService::decode_body(b)?,
+            Body::Encrypted(_e) => return Err(IotError::NoSecretKey),
+            Body::None => return Err(IotError::NoBody),
+        };
+
+        // TODO: pass through metadata
+        let s = IotService {
+            id: i.id,
+            secret_key: i.secret_key.clone(),
+            endpoints,
+            meta: vec![],
+        };
+
+        Ok(s)
+    }
 }
 
 
@@ -37,7 +68,7 @@ pub struct IotData {
 
     /// Measurement metadata
     #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
-    pub metadata: Vec<(String, String)>,
+    pub meta: Vec<(String, String)>,
 }
 
 
@@ -76,8 +107,27 @@ impl IotData {
     pub fn new(data: &[EndpointData], meta: &[(String, String)]) -> Self {
         Self {
             data: data.to_vec(),
-            metadata: meta.to_vec(),
+            meta: meta.to_vec(),
         }
+    }
+
+    pub fn decode(mut i: DataInfo, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
+        
+        i.body.decrypt(secret_key).unwrap();
+
+        let data = match &i.body {
+            Body::Cleartext(b) => IotData::decode_data(b)?,
+            Body::Encrypted(_e) => return Err(IotError::NoSecretKey),
+            Body::None => return Err(IotError::NoBody),
+        };
+
+        // TODO: pass through metadata
+        let s = IotData {
+            data,
+            meta: vec![],
+        };
+
+        Ok(s)
     }
 
     pub fn encode_data(data: &[EndpointData]) -> Result<Vec<u8>, IotError> {
