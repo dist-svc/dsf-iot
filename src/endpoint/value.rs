@@ -38,6 +38,16 @@ impl From<Vec<u8>> for EndpointValue {
     }
 }
 
+impl std::fmt::Display for EndpointValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EndpointValue::Text(v) => write!(f, "{}", v),
+            EndpointValue::Float32(v) => write!(f, "{:.02}", v),
+            EndpointValue::Bool(v) => write!(f, "{}", v),
+            EndpointValue::Bytes(v) => write!(f, "{:02x?}", v),
+        }
+    }
+}
 
 impl FromStr for EndpointValue {
     type Err = String;

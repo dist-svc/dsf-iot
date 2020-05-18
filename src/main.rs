@@ -143,7 +143,7 @@ fn print_service_data(service: &IotService, data: &[IotData]) {
             let ep_info = &service.endpoints[i];
             let ep_data = &d.data[i];
 
-            println!("  - {:?}: {:?} {}", ep_info.kind, ep_data.value, ep_info.kind.unit() );
+            println!("  - {:?}: {} {}", ep_info.kind, ep_data.value, ep_info.kind.unit() );
         }
     }
 }

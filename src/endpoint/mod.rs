@@ -174,17 +174,6 @@ impl EndpointData {
     }
 }
 
-impl std::fmt::Display for EndpointValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EndpointValue::Text(v) => write!(f, "{}", v),
-            EndpointValue::Float32(v) => write!(f, "{}", v),
-            EndpointValue::Bool(v) => write!(f, "{}", v),
-            EndpointValue::Bytes(v) => write!(f, "{:02x?}", v),
-        }
-    }
-}
-
 pub fn parse_endpoint_data(src: &str) -> Result<EndpointData, String> {
     let value = parse_endpoint_value(src)?;
     Ok(EndpointData::new(value, &[]))
