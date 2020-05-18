@@ -33,7 +33,6 @@ pub struct IotService {
     pub meta: Vec<(String, String)>,
 }
 
-
 impl TryFrom<ServiceInfo> for IotService {
     type Error = IotError;
 
@@ -57,18 +56,6 @@ impl TryFrom<ServiceInfo> for IotService {
 
         Ok(s)
     }
-}
-
-
-#[derive(Debug, Clone, StructOpt)]
-pub struct IotData {
-    /// Measurement values (these must correspond with service endpoints)
-    #[structopt(short, long, parse(try_from_str = parse_endpoint_data))]
-    pub data: Vec<EndpointData>,
-
-    /// Measurement metadata
-    #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
-    pub meta: Vec<(String, String)>,
 }
 
 
@@ -103,14 +90,19 @@ impl IotService {
 }
 
 
-impl IotData {
-    pub fn new(data: &[EndpointData], meta: &[(String, String)]) -> Self {
-        Self {
-            data: data.to_vec(),
-            meta: meta.to_vec(),
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct IotData {
+    pub signature: Signature,
+    pub previous: Option<Signature>,
 
+    /// Measurement values (these must correspond with service endpoints)
+    pub data: Vec<EndpointData>,
+
+    /// Measurement metadata
+    pub meta: Vec<(String, String)>,
+}
+
+impl IotData {
     pub fn decode(mut i: DataInfo, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
         
         i.body.decrypt(secret_key).unwrap();
@@ -123,6 +115,8 @@ impl IotData {
 
         // TODO: pass through metadata
         let s = IotData {
+            signature: i.signature,
+            previous: i.previous,
             data,
             meta: vec![],
         };

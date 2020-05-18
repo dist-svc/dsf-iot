@@ -14,10 +14,10 @@ use humantime::Duration;
 extern crate tracing;
 
 extern crate tracing_subscriber;
-use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::filter::{LevelFilter, EnvFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_iot::{Command, IotError, IotClient};
+use dsf_iot::{Command, IotError, IotClient, IotService, IotData};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -50,9 +50,14 @@ fn main() {
     // Fetch arguments
     let opts = Config::from_args();
 
+    let filter = EnvFilter::from_default_env()
+        .add_directive("async_std=warn".parse().unwrap());
+
+
     // Setup logging
     let _ = FmtSubscriber::builder()
         .with_max_level(opts.level.clone())
+        .with_env_filter(filter)
         .try_init();
 
     info!("opts: {:?}", opts);
@@ -83,7 +88,7 @@ fn main() {
             }
             Command::List(o) => {
                 let res = c.list(o).await?;
-                info!("{:?}", res);
+                print_service_list(&res);
             }
             Command::Register(o) => {
                 let res = c.register(o).await?;
@@ -94,8 +99,8 @@ fn main() {
                 info!("{:?}", res);
             }
             Command::Query(o) => {
-                let res = c.query(o).await?;
-                info!("{:?}", res);
+                let (service, data) = c.query(o).await?;
+                print_service_data(&service, &data);
             }
             Command::Subscribe(o) => {
                 let mut res = c.subscribe(o).await?;
@@ -111,5 +116,34 @@ fn main() {
 
     if let Err(e) = res {
         error!("{:?}", e);
+    }
+}
+
+
+fn print_service_list(services: &[IotService]) {
+    for s in services {
+        println!("Service: {}", s.id);
+        println!("Endpoints: ");
+        for i in 0..s.endpoints.len() {
+            let e = &s.endpoints[i];
+
+            println!("  - {}: {:?} (metadata: {:?})", i, e.kind, e.meta);
+        }
+    }
+}
+
+fn print_service_data(service: &IotService, data: &[IotData]) {
+    println!("Service: {}", service.id);
+    println!("Data: ");
+
+    for d in data {
+        println!("Object {} (previous: {:?})", d.signature, d.previous);
+
+        for i in 0..d.data.len() {
+            let ep_info = &service.endpoints[i];
+            let ep_data = &d.data[i];
+
+            println!("  - {:?}: {:?} {}", ep_info.kind, ep_data.value, ep_info.kind.unit() );
+        }
     }
 }

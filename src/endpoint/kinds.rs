@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
-    (EndpointKind::Temperature, "temperature", "C", 1),
+    (EndpointKind::Temperature, "temperature", "°C", 1),
     (EndpointKind::Humidity, "humidity", "% RH", 2),
     (EndpointKind::Pressure, "pressure", "   kPa", 3),
 ];
@@ -58,6 +58,13 @@ impl EndpointKind {
         write!(&mut buff, "RAW_ID (no unit)").unwrap();
 
         buff
+    }
+
+    pub fn unit(&self) -> String {
+        match ENDPOINT_KINDS.iter().find(|(k, _s, _u, _i)| k == self) {
+            Some(e) => e.2.to_string(),
+            None => "unknown".to_string(),
+        }
     }
 }
 
