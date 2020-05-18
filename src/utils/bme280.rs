@@ -29,30 +29,30 @@ struct Config {
     #[structopt(flatten)]
     service: ServiceIdentifier,
     
-    #[structopt(long = "i2c-device", default_value = "/dev/i2c-1")]
+    #[structopt(long, default_value = "/dev/i2c-1")]
     /// Specify the I2C port for the sensor
     i2c_dev: String,
 
-    #[structopt(long = "i2c-addr", default_value = "119")]
+    #[structopt(long, default_value = "119")]
     /// Specify the I2C address for the sensor
     i2c_addr: u8,
 
-    #[structopt(long = "period", default_value = "1m")]
+    #[structopt(long, default_value = "1m")]
     /// Specify a period for sensor readings
     period: Duration,
 
     #[structopt(
         short = "d",
-        long = "daemon-socket",
+        long,
         default_value = "/tmp/dsf.sock",
         env = "DSF_SOCK"
     )]
     /// Specify the socket to bind the DSF daemon
     daemon_socket: String,
 
-    #[structopt(long = "log-level", default_value = "info")]
+    #[structopt(long, default_value = "info")]
     /// Enable verbose logging
-    level: LevelFilter,
+    log_level: LevelFilter,
 
     #[structopt(long, default_value = "3s")]
     /// Timeout for daemon requests
@@ -64,27 +64,26 @@ fn main() {
     let opts = Config::from_args();
 
     let filter = EnvFilter::from_default_env()
+        .add_directive(format!("dsf_iot={}", opts.log_level).parse().unwrap())
         .add_directive("async_std=warn".parse().unwrap());
-
 
     // Setup logging
     let _ = FmtSubscriber::builder()
-        .with_max_level(opts.level.clone())
         .with_env_filter(filter)
         .try_init();
 
-    info!("opts: {:?}", opts);
+    debug!("opts: {:?}", opts);
 
     let res: Result<(), IotError> = task::block_on(async {
         // Create client connector
-        debug!("Connecting to client socket: '{}'", &opts.daemon_socket);
+        println!("Connecting to client socket: '{}'", &opts.daemon_socket);
         let mut c = IotClient::new(&opts.daemon_socket, *opts.timeout)?;
 
         let service = opts.service.clone();
 
         let handle = match (&service.index, &service.id) {
             (None, None) => {
-                info!("Creating new BME280 service");
+                println!("Creating new BME280 service");
 
                 let s = c.create(CreateOptions{
                     endpoints: vec![
@@ -99,10 +98,10 @@ fn main() {
             },
 
             _ => {
-                info!("Connecting to existing service");
+                println!("Connecting to existing service");
                 let s = c.base().info(service.into()).await?;
 
-                info!("Located service: {:?}", s.1);
+                println!("Located service: {:?}", s.1);
 
                 s.0
             }
@@ -112,22 +111,25 @@ fn main() {
         // Connect to sensor
         let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
         let mut bme280 = BME280::new(i2c_bus, opts.i2c_addr, Delay);
+        bme280.init().unwrap();
 
         // Run sensor loop
         loop {
             // Take measurement
             let m = bme280.measure().unwrap();
 
-            info!("Measurement: {:?}", m);
+            let data = vec![
+                EndpointData::new(m.temperature.into(), &[]),
+                EndpointData::new((m.pressure / 1000.0).into(), &[]),
+                EndpointData::new(m.humidity.into(), &[]),
+            ];
+
+            println!("Measurement: {:?}", data);
 
             // Publish new object
             c.publish(PublishOptions {
                 service: ServiceIdentifier::id(handle.id.clone()),
-                data: vec![
-                    EndpointData::new(m.temperature.into(), &[]),
-                    EndpointData::new(m.pressure.into(), &[]),
-                    EndpointData::new(m.humidity.into(), &[]),
-                ],
+                data,
                 meta: vec![],
             }).await?;
 
