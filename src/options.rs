@@ -3,7 +3,7 @@ use std::convert::TryInto;
 
 use dsf_core::base::NewBody;
 
-use dsf_rpc::{ServiceIdentifier, PageBounds};
+use dsf_rpc::{ServiceIdentifier};
 pub use dsf_rpc::service::{LocateOptions, RegisterOptions, SubscribeOptions, try_parse_key_value};
 
 use crate::{IotError, IotService};
@@ -53,6 +53,17 @@ pub struct CreateOptions {
     pub register: bool,
 }
 
+impl Default for CreateOptions {
+    fn default() -> Self {
+        Self{
+            endpoints: vec![],
+            meta: vec![],
+            public: false,
+            register: true,
+        }
+    }
+}
+
 impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
     type Error = IotError;
 
@@ -87,7 +98,7 @@ pub struct PublishOptions {
 
     /// Measurement metadata
     #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
-    pub metadata: Vec<(String, String)>,
+    pub meta: Vec<(String, String)>,
 }
 
 impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {

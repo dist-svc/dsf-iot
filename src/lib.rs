@@ -22,14 +22,15 @@ use dsf_core::api::ServiceHandle;
 use dsf_core::prelude::*;
 use dsf_core::types::DataKind;
 use dsf_core::options::{OptionsError};
-use dsf_core::crypto;
 
 extern crate dsf_client;
 use dsf_client::prelude::*;
 pub use dsf_client::Error;
 
 extern crate dsf_rpc;
-use dsf_rpc::{self as rpc, LocateInfo, PublishInfo, ServiceIdentifier, ServiceInfo};
+use dsf_rpc::{self as rpc, LocateInfo, PublishInfo};
+
+pub use dsf_rpc::ServiceIdentifier;
 
 pub mod endpoint;
 pub use endpoint::*;

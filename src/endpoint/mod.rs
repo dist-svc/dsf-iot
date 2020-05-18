@@ -110,7 +110,7 @@ impl EndpointData {
         let kind = NetworkEndian::read_u16(&data[0..]);
         let len = NetworkEndian::read_u16(&data[2..]);
 
-        let value = match (kind) {
+        let value = match kind {
             VALUE_BOOL_FALSE => EndpointValue::Bool(false),
             VALUE_BOOL_TRUE => EndpointValue::Bool(true),
             VALUE_FLOAT => {
@@ -171,6 +171,17 @@ impl EndpointData {
         // TODO: write metadata
 
         Ok(w.position() as usize)
+    }
+}
+
+impl std::fmt::Display for EndpointValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EndpointValue::Text(v) => write!(f, "{}", v),
+            EndpointValue::Float32(v) => write!(f, "{}", v),
+            EndpointValue::Bool(v) => write!(f, "{}", v),
+            EndpointValue::Bytes(v) => write!(f, "{:02x?}", v),
+        }
     }
 }
 

@@ -14,6 +14,31 @@ pub enum EndpointValue {
     Bytes(Vec<u8>),
 }
 
+impl From<bool> for EndpointValue {
+    fn from(v: bool) -> Self {
+        Self::Bool(v)
+    }
+}
+
+impl From<f32> for EndpointValue {
+    fn from(v: f32) -> Self {
+        Self::Float32(v)
+    }
+}
+
+impl From<String> for EndpointValue {
+    fn from(v: String) -> Self {
+        Self::Text(v)
+    }
+}
+
+impl From<Vec<u8>> for EndpointValue {
+    fn from(v: Vec<u8>) -> Self {
+        Self::Bytes(v)
+    }
+}
+
+
 impl FromStr for EndpointValue {
     type Err = String;
 

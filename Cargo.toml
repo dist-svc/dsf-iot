@@ -6,6 +6,13 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+bme280-util = [ "linux-embedded-hal", "bme280" ]
+
+utils = [ "bme280-util" ]
+
+default = [ "utils" ]
+
 [dependencies]
 serde = "1.0.104"
 structopt = "0.3.8"
@@ -20,6 +27,9 @@ chrono = "0.4.10"
 byteorder = "1.3.4"
 log = "0.4.8"
 
+linux-embedded-hal = { version = "0.3.0", optional = true }
+bme280 = { version = "0.2.1", optional = true }
+
 [dependencies.dsf-core]
 version = "0.1.0"
 
@@ -28,3 +38,8 @@ version = "0.1.0"
 
 [dependencies.dsf-client]
 version = "0.1.0"
+
+[[bin]]
+name = "dsf-bme280"
+path = "src/utils/bme280.rs"
+required-features = ["bme280-util"]
