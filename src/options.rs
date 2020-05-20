@@ -1,14 +1,14 @@
-use structopt::StructOpt;
 use std::convert::TryInto;
+use structopt::StructOpt;
 
 use dsf_core::base::NewBody;
 
-use dsf_rpc::{ServiceIdentifier};
-pub use dsf_rpc::service::{LocateOptions, RegisterOptions, SubscribeOptions, try_parse_key_value};
+pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
+use dsf_rpc::ServiceIdentifier;
 
-use crate::{IotError, IotService};
 use crate::endpoint::*;
 use crate::service::*;
+use crate::{IotError, IotService};
 
 #[derive(Debug, Clone, StructOpt)]
 pub enum Command {
@@ -55,7 +55,7 @@ pub struct CreateOptions {
 
 impl Default for CreateOptions {
     fn default() -> Self {
-        Self{
+        Self {
             endpoints: vec![],
             meta: vec![],
             public: false,
@@ -69,7 +69,6 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
 
     // Generate an RPC create message for an IoT service instance
     fn try_into(self) -> Result<dsf_rpc::CreateOptions, Self::Error> {
-
         let body = IotService::encode_body(&self.endpoints)?;
 
         let co = dsf_rpc::CreateOptions {
@@ -85,7 +84,6 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
         Ok(co)
     }
 }
-
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct PublishOptions {
@@ -106,7 +104,6 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
 
     // Generate an RPC create message for an IoT service instance
     fn try_into(self) -> Result<dsf_rpc::PublishOptions, Self::Error> {
-
         let data = IotData::encode_data(&self.data)?;
 
         let po = dsf_rpc::PublishOptions {
@@ -122,10 +119,8 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
 /// QueryOptions used to fetch data for an IoT service
 pub type QueryOptions = dsf_rpc::data::ListOptions;
 
-
 /// ListOptions used to list known iot services
 pub type ListOptions = dsf_rpc::service::ListOptions;
-
 
 /// InfoOptions used to fetch info for services
 pub type InfoOptions = dsf_rpc::service::InfoOptions;

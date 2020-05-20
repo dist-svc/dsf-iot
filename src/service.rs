@@ -2,21 +2,19 @@ use std::convert::TryFrom;
 
 use structopt::StructOpt;
 
-use dsf_rpc::service::{ServiceInfo, try_parse_key_value};
-use dsf_rpc::data::{DataInfo};
+use dsf_rpc::data::DataInfo;
+use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
 
+use dsf_core::base::Body;
 use dsf_core::types::*;
-use dsf_core::base::{Body};
 
-use crate::IotError;
 use crate::endpoint::*;
-
+use crate::IotError;
 
 pub const IOT_APP_ID: u16 = 1;
 
 pub const IOT_SERVICE_PAGE_KIND: u16 = 1;
 pub const IOT_DATA_PAGE_KIND: u16 = 2;
-
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct IotService {
@@ -37,7 +35,6 @@ impl TryFrom<ServiceInfo> for IotService {
     type Error = IotError;
 
     fn try_from(mut i: ServiceInfo) -> Result<IotService, IotError> {
-        
         i.body.decrypt(i.secret_key.as_ref()).unwrap();
 
         let endpoints = match &i.body {
@@ -58,9 +55,7 @@ impl TryFrom<ServiceInfo> for IotService {
     }
 }
 
-
 impl IotService {
-
     pub fn encode_body(endpoints: &[EndpointDescriptor]) -> Result<Vec<u8>, IotError> {
         let mut buff = vec![0u8; 1024];
         let mut index = 0;
@@ -89,7 +84,6 @@ impl IotService {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct IotData {
     pub signature: Signature,
@@ -104,7 +98,6 @@ pub struct IotData {
 
 impl IotData {
     pub fn decode(mut i: DataInfo, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
-        
         i.body.decrypt(secret_key).unwrap();
 
         let data = match &i.body {

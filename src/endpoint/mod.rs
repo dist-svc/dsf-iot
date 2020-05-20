@@ -123,8 +123,8 @@ impl EndpointData {
             }
             _ => {
                 error!("Unrecognised option kind: 0x{:x?}", kind);
-                return Err(OptionsError::InvalidOptionKind)
-            },
+                return Err(OptionsError::InvalidOptionKind);
+            }
         };
 
         // TODO: read metadata
@@ -241,7 +241,5 @@ mod tests {
 
             assert_eq!(d, &d1);
         }
-
-
     }
 }

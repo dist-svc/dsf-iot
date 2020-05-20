@@ -1,5 +1,4 @@
-use std::time::Duration;
-use std::convert::{TryInto, TryFrom};
+use std::convert::{TryFrom, TryInto};
 
 extern crate serde;
 
@@ -19,13 +18,13 @@ use futures::prelude::*;
 
 extern crate dsf_core;
 use dsf_core::api::ServiceHandle;
+use dsf_core::options::OptionsError;
 use dsf_core::prelude::*;
 use dsf_core::types::DataKind;
-use dsf_core::options::{OptionsError};
 
 extern crate dsf_client;
 use dsf_client::prelude::*;
-pub use dsf_client::Error;
+pub use dsf_client::{Error, Options};
 
 extern crate dsf_rpc;
 use dsf_rpc::{self as rpc, LocateInfo, PublishInfo};
@@ -74,8 +73,8 @@ impl From<OptionsError> for IotError {
 
 impl IotClient {
     /// Create a new DSF-IoT client using the provided path
-    pub fn new(path: &str, timeout: Duration) -> Result<Self, IotError> {
-        let client = Client::new(path, timeout)?;
+    pub fn new(options: &Options) -> Result<Self, IotError> {
+        let client = Client::new(options)?;
 
         Ok(Self { client })
     }
@@ -87,7 +86,6 @@ impl IotClient {
 
     /// Create a new IoT service
     pub async fn create(&mut self, options: CreateOptions) -> Result<ServiceHandle, IotError> {
-
         debug!("Creating service: {:?}", options.endpoints);
 
         let encoded = options.try_into()?;
@@ -103,7 +101,8 @@ impl IotClient {
 
     /// Search for an existing IoT service
     pub async fn search(&mut self, id: &Id) -> Result<(ServiceHandle, LocateInfo), IotError> {
-        let r = self.client
+        let r = self
+            .client
             .locate(LocateOptions {
                 id: id.clone(),
                 local_only: false,
@@ -120,7 +119,10 @@ impl IotClient {
 
         let mut r = self.client.list(req).await?;
 
-        let s = r.drain(..).map(|v| IotService::try_from(v).unwrap() ).collect();
+        let s = r
+            .drain(..)
+            .map(|v| IotService::try_from(v).unwrap())
+            .collect();
 
         Ok(s)
     }
@@ -135,10 +137,7 @@ impl IotClient {
     }
 
     /// Fetch service information
-    pub async fn info(
-        &mut self,
-        options: InfoOptions,
-    ) -> Result<IotService, IotError> {
+    pub async fn info(&mut self, options: InfoOptions) -> Result<IotService, IotError> {
         let (_h, mut i) = self.client.info(options).await?;
 
         i.body.decrypt(i.secret_key.as_ref()).unwrap();
@@ -178,16 +177,24 @@ impl IotClient {
     }
 
     /// Query for data from an IoT service
-    pub async fn query(&mut self, options: QueryOptions) -> Result<(IotService, Vec<IotData>), IotError> {
+    pub async fn query(
+        &mut self,
+        options: QueryOptions,
+    ) -> Result<(IotService, Vec<IotData>), IotError> {
         debug!("Querying for data: {:?}", options);
 
-        let iot_info = self.info(InfoOptions{service: options.service.clone()}).await?;
+        let iot_info = self
+            .info(InfoOptions {
+                service: options.service.clone(),
+            })
+            .await?;
 
         let mut data_info = self.client.data(options).await?;
 
-        let iot_data = data_info.drain(..).map(|v| {
-            IotData::decode(v, iot_info.secret_key.as_ref()).unwrap()
-        }).collect();
+        let iot_data = data_info
+            .drain(..)
+            .map(|v| IotData::decode(v, iot_info.secret_key.as_ref()).unwrap())
+            .collect();
 
         debug!("Result: {:#?}", iot_data);
 
@@ -204,5 +211,4 @@ impl IotClient {
         // TODO: decode endpoint info here
         Ok(resp.map(|_d| ()))
     }
-
 }

@@ -17,18 +17,24 @@ use bme280::BME280;
 extern crate tracing;
 
 extern crate tracing_subscriber;
-use tracing_subscriber::filter::{LevelFilter, EnvFilter};
+use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-
-use dsf_iot::{IotClient, IotError, CreateOptions, PublishOptions, EndpointDescriptor, EndpointKind, EndpointData, ServiceIdentifier};
+use dsf_iot::{
+    CreateOptions, EndpointData, EndpointDescriptor, EndpointKind, 
+    IotClient, IotError, Options,
+    PublishOptions, ServiceIdentifier,
+};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "DSF IoT BME280 Client")]
 struct Config {
     #[structopt(flatten)]
     service: ServiceIdentifier,
-    
+
+    #[structopt(flatten)]
+    daemon_options: Options,
+
     #[structopt(long, default_value = "/dev/i2c-1")]
     /// Specify the I2C port for the sensor
     i2c_dev: String,
@@ -41,22 +47,9 @@ struct Config {
     /// Specify a period for sensor readings
     period: Duration,
 
-    #[structopt(
-        short = "d",
-        long,
-        default_value = "/tmp/dsf.sock",
-        env = "DSF_SOCK"
-    )]
-    /// Specify the socket to bind the DSF daemon
-    daemon_socket: String,
-
     #[structopt(long, default_value = "info")]
     /// Enable verbose logging
     log_level: LevelFilter,
-
-    #[structopt(long, default_value = "3s")]
-    /// Timeout for daemon requests
-    timeout: Duration,
 }
 
 fn main() {
@@ -68,16 +61,14 @@ fn main() {
         .add_directive("async_std=warn".parse().unwrap());
 
     // Setup logging
-    let _ = FmtSubscriber::builder()
-        .with_env_filter(filter)
-        .try_init();
+    let _ = FmtSubscriber::builder().with_env_filter(filter).try_init();
 
     debug!("opts: {:?}", opts);
 
     let res: Result<(), IotError> = task::block_on(async {
         // Create client connector
-        println!("Connecting to client socket: '{}'", &opts.daemon_socket);
-        let mut c = IotClient::new(&opts.daemon_socket, *opts.timeout)?;
+        println!("Connecting to client socket: '{}'", &opts.daemon_options.daemon_socket);
+        let mut c = IotClient::new(&opts.daemon_options)?;
 
         let service = opts.service.clone();
 
@@ -85,17 +76,19 @@ fn main() {
             (None, None) => {
                 println!("Creating new BME280 service");
 
-                let s = c.create(CreateOptions{
-                    endpoints: vec![
-                        EndpointDescriptor::new(EndpointKind::Temperature, &[]),
-                        EndpointDescriptor::new(EndpointKind::Pressure, &[]),
-                        EndpointDescriptor::new(EndpointKind::Humidity, &[]),
-                    ],
-                    .. Default::default()
-                }).await?;
+                let s = c
+                    .create(CreateOptions {
+                        endpoints: vec![
+                            EndpointDescriptor::new(EndpointKind::Temperature, &[]),
+                            EndpointDescriptor::new(EndpointKind::Pressure, &[]),
+                            EndpointDescriptor::new(EndpointKind::Humidity, &[]),
+                        ],
+                        ..Default::default()
+                    })
+                    .await?;
 
                 s
-            },
+            }
 
             _ => {
                 println!("Connecting to existing service");
@@ -106,7 +99,6 @@ fn main() {
                 s.0
             }
         };
-
 
         // Connect to sensor
         let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
@@ -131,7 +123,8 @@ fn main() {
                 service: ServiceIdentifier::id(handle.id.clone()),
                 data,
                 meta: vec![],
-            }).await?;
+            })
+            .await?;
 
             // Wait until next measurement
             async_std::task::sleep(*opts.period).await;
@@ -142,4 +135,3 @@ fn main() {
         error!("{:?}", e);
     }
 }
-

@@ -8,16 +8,15 @@ extern crate async_std;
 use async_std::task;
 
 extern crate humantime;
-use humantime::Duration;
 
 #[macro_use]
 extern crate tracing;
 
 extern crate tracing_subscriber;
-use tracing_subscriber::filter::{LevelFilter, EnvFilter};
+use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_iot::{Command, IotError, IotClient, IotService, IotData};
+use dsf_iot::{Command, Options, IotClient, IotData, IotError, IotService};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -28,31 +27,19 @@ struct Config {
     #[structopt(subcommand)]
     cmd: Command,
 
-    #[structopt(
-        short = "d",
-        long = "daemon-socket",
-        default_value = "/tmp/dsf.sock",
-        env = "DSF_SOCK"
-    )]
-    /// Specify the socket to bind the DSF daemon
-    daemon_socket: String,
+    #[structopt(flatten)]
+    client_options: Options,
 
     #[structopt(long = "log-level", default_value = "info")]
     /// Enable verbose logging
     level: LevelFilter,
-
-    #[structopt(long, default_value = "3s")]
-    /// Timeout for daemon requests
-    timeout: Duration,
 }
 
 fn main() {
     // Fetch arguments
     let opts = Config::from_args();
 
-    let filter = EnvFilter::from_default_env()
-        .add_directive("async_std=warn".parse().unwrap());
-
+    let filter = EnvFilter::from_default_env().add_directive("async_std=warn".parse().unwrap());
 
     // Setup logging
     let _ = FmtSubscriber::builder()
@@ -64,13 +51,12 @@ fn main() {
 
     let res: Result<(), IotError> = task::block_on(async {
         // Create client connector
-        debug!("Connecting to client socket: '{}'", &opts.daemon_socket);
-        let mut c = match IotClient::new(&opts.daemon_socket, *opts.timeout) {
+        let mut c = match IotClient::new(&opts.client_options) {
             Ok(c) => c,
             Err(e) => {
                 error!(
                     "Error connecting to daemon on '{}': {:?}",
-                    &opts.daemon_socket, e
+                    &opts.client_options.daemon_socket, e
                 );
                 return Err(e);
             }
@@ -119,7 +105,6 @@ fn main() {
     }
 }
 
-
 fn print_service_list(services: &[IotService]) {
     for s in services {
         println!("Service: {}", s.id);
@@ -143,7 +128,12 @@ fn print_service_data(service: &IotService, data: &[IotData]) {
             let ep_info = &service.endpoints[i];
             let ep_data = &d.data[i];
 
-            println!("  - {:?}: {} {}", ep_info.kind, ep_data.value, ep_info.kind.unit() );
+            println!(
+                "  - {:?}: {} {}",
+                ep_info.kind,
+                ep_data.value,
+                ep_info.kind.unit()
+            );
         }
     }
 }
