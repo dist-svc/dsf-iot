@@ -21,8 +21,7 @@ use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
 use dsf_iot::{
-    CreateOptions, EndpointData, EndpointDescriptor, EndpointKind, 
-    IotClient, IotError, Options,
+    CreateOptions, EndpointData, EndpointDescriptor, EndpointKind, IotClient, IotError, Options,
     PublishOptions, ServiceIdentifier,
 };
 
@@ -67,7 +66,10 @@ fn main() {
 
     let res: Result<(), IotError> = task::block_on(async {
         // Create client connector
-        println!("Connecting to client socket: '{}'", &opts.daemon_options.daemon_socket);
+        println!(
+            "Connecting to client socket: '{}'",
+            &opts.daemon_options.daemon_socket
+        );
         let mut c = IotClient::new(&opts.daemon_options)?;
 
         let service = opts.service.clone();
@@ -86,7 +88,6 @@ fn main() {
                         ..Default::default()
                     })
                     .await?;
-
                 s
             }
 
@@ -99,6 +100,8 @@ fn main() {
                 s.0
             }
         };
+
+        println!("Using service: {:?}", handle.id);
 
         // Connect to sensor
         let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
