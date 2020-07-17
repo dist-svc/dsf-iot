@@ -8,7 +8,7 @@ use dsf_rpc::ServiceIdentifier;
 
 use crate::endpoint::*;
 use crate::service::*;
-use crate::{IotError, IotService};
+use crate::error::IotError;
 
 #[derive(Debug, Clone, StructOpt)]
 pub enum Command {

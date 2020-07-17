@@ -9,7 +9,7 @@ use dsf_core::base::Body;
 use dsf_core::types::*;
 
 use crate::endpoint::*;
-use crate::IotError;
+use crate::error::IotError;
 
 pub const IOT_APP_ID: u16 = 1;
 
