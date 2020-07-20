@@ -1,6 +1,6 @@
 use std::io::{Cursor, Write};
 
-use log::{trace, debug, info};
+use log::{trace, info, warn, error};
 
 use serde::{Deserialize, Serialize};
 

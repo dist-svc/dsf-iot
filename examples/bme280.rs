@@ -20,10 +20,9 @@ extern crate tracing_subscriber;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_iot::{
-    CreateOptions, EndpointData, EndpointDescriptor, EndpointKind, IotClient, IotError, Options,
-    PublishOptions, ServiceIdentifier,
-};
+
+use dsf_iot::prelude::*;
+
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "DSF IoT BME280 Client")]

@@ -14,7 +14,7 @@ pub enum IotError {
 
 #[cfg(feature = "std")]
 impl From<dsf_client::Error> for IotError {
-    fn from(e: ClientError) -> Self {
+    fn from(e: dsf_client::Error) -> Self {
         Self::Client(e)
     }
 }

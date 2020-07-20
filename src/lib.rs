@@ -10,7 +10,9 @@ pub mod endpoint;
 pub mod service;
 pub mod error;
 
-#[cfg(feature = "std")]
+pub mod prelude;
+
+#[cfg(feature = "client")]
 pub mod client;
 
 pub const IOT_APP_ID: u16 = 1;
