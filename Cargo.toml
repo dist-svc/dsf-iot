@@ -22,7 +22,7 @@ default = [ "client", "util", "std" ]
 bytes = { version = "0.5.4", default_features = false }
 byteorder = { version = "1.3.4", default_features = false }
 log = "0.4.8"
-managed = "*"
+managed = { version = "*", default_features = false }
 
 
 serde = { version = "1.0.104", optional = true }

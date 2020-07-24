@@ -13,8 +13,6 @@ use alloc::prelude::v1::*;
 #[cfg(feature = "alloc")]
 use alloc::vec;
 
-use managed::ManagedSlice;
-
 use crate::endpoint::*;
 use crate::error::IotError;
 

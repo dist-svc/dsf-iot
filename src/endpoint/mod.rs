@@ -5,7 +5,7 @@ use alloc::prelude::v1::*;
 
 use log::{trace, debug, info, warn, error};
 
-use byteorder::{ByteOrder, NetworkEndian, WriteBytesExt};
+use byteorder::{ByteOrder, NetworkEndian};
 
 use dsf_core::options::{Metadata, OptionsError};
 
