@@ -9,6 +9,7 @@ pub enum IotError {
 
     NoSecretKey,
     NoBody,
+    UnrecognisedEndpoint,
 }
 
 

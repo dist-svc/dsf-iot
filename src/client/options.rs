@@ -1,4 +1,8 @@
-use std::convert::TryInto;
+use core::convert::TryInto;
+
+#[cfg(feature = "alloc")]
+use alloc::prelude::v1::*;
+
 use structopt::StructOpt;
 
 use dsf_core::base::NewBody;
@@ -9,6 +13,7 @@ use dsf_rpc::ServiceIdentifier;
 use crate::endpoint::*;
 use crate::service::*;
 use crate::error::IotError;
+
 
 #[derive(Debug, Clone, StructOpt)]
 pub enum Command {

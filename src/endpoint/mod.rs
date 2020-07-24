@@ -1,8 +1,9 @@
-use std::io::{Cursor, Write};
 
-use log::{trace, info, warn, error};
 
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "alloc")]
+use alloc::prelude::v1::*;
+
+use log::{trace, debug, info, warn, error};
 
 use byteorder::{ByteOrder, NetworkEndian, WriteBytesExt};
 
@@ -25,7 +26,8 @@ pub mod iot_option_kinds {
 }
 
 /// An endpoint descriptor defines the kind of an endpoint
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
 pub struct EndpointDescriptor {
     /// Endpoint Data Kind
     pub kind: EndpointKind,
@@ -35,7 +37,8 @@ pub struct EndpointDescriptor {
 }
 
 /// Endpoint data object contains data associated with a specific endpoint
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
 pub struct EndpointData {
     // Measurement value
     pub value: EndpointValue,
@@ -70,26 +73,26 @@ impl EndpointDescriptor {
 
         // TODO: read metadata
 
-        Ok((Self { kind, meta: vec![] }, len as usize))
+        Ok((Self { kind, meta: Vec::new() }, len as usize))
     }
 
     pub fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
-        let mut w = Cursor::new(data);
 
         // Write option header (option kind and length)
-        w.write_u16::<NetworkEndian>(iot_option_kinds::ENDPOINT_DESCRIPTOR)?;
-        w.write_u16::<NetworkEndian>(iot_option_kinds::ENDPOINT_DESCRIPTOR_LEN as u16)?;
+        NetworkEndian::write_u16(&mut data[0..], iot_option_kinds::ENDPOINT_DESCRIPTOR);
+        NetworkEndian::write_u16(&mut data[2..], iot_option_kinds::ENDPOINT_DESCRIPTOR_LEN as u16);
 
         // Write option data (endpoint kind, reserved flags)
-        w.write_u16::<NetworkEndian>(u16::from(&self.kind))?;
-        w.write_u16::<NetworkEndian>(0)?;
+        NetworkEndian::write_u16(&mut data[4..], u16::from(&self.kind));
+        NetworkEndian::write_u16(&mut data[6..], 0);
 
         // TODO: write metadata
 
-        Ok(w.position() as usize)
+        Ok(8)
     }
 }
 
+#[cfg(feature = "std")]
 pub fn parse_endpoint_descriptor(src: &str) -> Result<EndpointDescriptor, String> {
     let kind = parse_endpoint_kind(src)?;
     Ok(EndpointDescriptor::new(kind, &[]))
@@ -120,7 +123,7 @@ impl EndpointData {
                 EndpointValue::Float32(f)
             }
             VALUE_STRING => {
-                let s = std::str::from_utf8(&data[4..]).unwrap();
+                let s = core::str::from_utf8(&data[4..]).unwrap();
                 EndpointValue::Text(s.to_owned())
             }
             _ => {
@@ -134,7 +137,7 @@ impl EndpointData {
         Ok((
             Self {
                 value,
-                meta: vec![],
+                meta: Vec::new(),
             },
             len as usize + 4,
         ))
@@ -143,36 +146,38 @@ impl EndpointData {
     pub fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
         use iot_option_kinds::*;
 
-        let mut w = Cursor::new(data);
-
         // Write option header and data
-        match &self.value {
+        let len = match &self.value {
             EndpointValue::Bool(v) if *v == true => {
-                w.write_u16::<NetworkEndian>(VALUE_BOOL_TRUE)?;
-                w.write_u16::<NetworkEndian>(0)?;
+                NetworkEndian::write_u16(&mut data[0..], VALUE_BOOL_TRUE);
+                NetworkEndian::write_u16(&mut data[2..], 0);
+                4
             }
             EndpointValue::Bool(v) if *v == false => {
-                w.write_u16::<NetworkEndian>(VALUE_BOOL_FALSE)?;
-                w.write_u16::<NetworkEndian>(0)?;
+                NetworkEndian::write_u16(&mut data[0..], VALUE_BOOL_FALSE);
+                NetworkEndian::write_u16(&mut data[2..], 0);
+                4
             }
             EndpointValue::Float32(v) => {
-                w.write_u16::<NetworkEndian>(VALUE_FLOAT)?;
-                w.write_u16::<NetworkEndian>(4)?;
-                w.write_f32::<NetworkEndian>(*v)?;
+                NetworkEndian::write_u16(&mut data[0..], VALUE_FLOAT);
+                NetworkEndian::write_u16(&mut data[2..], 4);
+                NetworkEndian::write_f32(&mut data[4..], *v);
+                8
             }
             EndpointValue::Text(v) => {
                 let b = v.as_bytes();
 
-                w.write_u16::<NetworkEndian>(VALUE_STRING)?;
-                w.write_u16::<NetworkEndian>(b.len() as u16)?;
-                w.write(b)?;
+                NetworkEndian::write_u16(&mut data[0..], VALUE_STRING);
+                NetworkEndian::write_u16(&mut data[2..], b.len() as u16);
+                (&mut data[4..4+b.len()]).copy_from_slice(b);
+                4 + b.len()
             }
             _ => unimplemented!(),
-        }
+        };
 
         // TODO: write metadata
 
-        Ok(w.position() as usize)
+        Ok(len)
     }
 }
 
@@ -207,7 +212,7 @@ mod tests {
 
             let n = descriptor.encode(&mut buff).expect("Encoding error");
 
-            println!("Encoded {:?} to: {:0x?}", descriptor, &buff[..n]);
+            trace!("Encoded {:?} to: {:0x?}", descriptor, &buff[..n]);
 
             let (d, _n) = EndpointDescriptor::parse(&buff[..n]).expect("Decoding error");
 
@@ -237,7 +242,7 @@ mod tests {
 
             let n = d.encode(&mut buff).expect("Encoding error");
 
-            println!("Encoded {:?} to: {:0x?}", d, &buff[..n]);
+            trace!("Encoded {:?} to: {:0x?}", d, &buff[..n]);
 
             let (d1, _n) = EndpointData::parse(&buff[..n]).expect("Decoding error");
 

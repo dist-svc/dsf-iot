@@ -1,12 +1,19 @@
-use std::convert::TryFrom;
+use core::convert::{TryFrom};
 
-use structopt::StructOpt;
-
-use dsf_rpc::data::DataInfo;
+#[cfg(feature = "dsf_rpc")]
 use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
 
 use dsf_core::base::Body;
 use dsf_core::types::*;
+
+
+#[cfg(feature = "alloc")]
+use alloc::prelude::v1::*;
+
+#[cfg(feature = "alloc")]
+use alloc::vec;
+
+use managed::ManagedSlice;
 
 use crate::endpoint::*;
 use crate::error::IotError;
@@ -16,21 +23,24 @@ pub const IOT_APP_ID: u16 = 1;
 pub const IOT_SERVICE_PAGE_KIND: u16 = 1;
 pub const IOT_DATA_PAGE_KIND: u16 = 2;
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "structopt", derive(structopt::StructOpt))]
 pub struct IotService {
     pub id: Id,
 
     pub secret_key: Option<SecretKey>,
 
     /// Service endpoint information
-    #[structopt(long, parse(try_from_str=parse_endpoint_descriptor))]
+    #[cfg_attr(feature = "structopt", structopt(long, parse(try_from_str=parse_endpoint_descriptor)))]
     pub endpoints: Vec<EndpointDescriptor>,
 
     /// Service metadata
-    #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
+    #[cfg_attr(feature = "structopt", structopt(long = "meta", parse(try_from_str = try_parse_key_value)))]
     pub meta: Vec<(String, String)>,
 }
 
+
+#[cfg(feature = "dsf_rpc")]
 impl TryFrom<ServiceInfo> for IotService {
     type Error = IotError;
 
@@ -38,7 +48,7 @@ impl TryFrom<ServiceInfo> for IotService {
         i.body.decrypt(i.secret_key.as_ref()).unwrap();
 
         let endpoints = match &i.body {
-            Body::Cleartext(b) => IotService::decode_body(b)?,
+            Body::Cleartext(b) => IotService::decode_body(&b)?,
             Body::Encrypted(_e) => return Err(IotError::NoSecretKey),
             Body::None => return Err(IotError::NoBody),
         };
@@ -56,8 +66,7 @@ impl TryFrom<ServiceInfo> for IotService {
 }
 
 impl IotService {
-    pub fn encode_body(endpoints: &[EndpointDescriptor]) -> Result<Vec<u8>, IotError> {
-        let mut buff = vec![0u8; 1024];
+    pub fn encode_body(endpoints: &[EndpointDescriptor], buff: &mut[u8]) -> Result<usize, IotError> {
         let mut index = 0;
 
         // Encode each endpoint entry
@@ -65,7 +74,7 @@ impl IotService {
             index += ed.encode(&mut buff[index..])?;
         }
 
-        Ok(buff[0..index].to_vec())
+        Ok(index)
     }
 
     pub fn decode_body(buff: &[u8]) -> Result<Vec<EndpointDescriptor>, IotError> {
@@ -96,12 +105,24 @@ pub struct IotData {
     pub meta: Vec<(String, String)>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
+pub struct DataInfo {
+    pub service: Id,
+
+    pub index: u16,
+    pub body: Body,
+
+    pub previous: Option<Signature>,
+    pub signature: Signature,
+}
+
 impl IotData {
     pub fn decode(mut i: DataInfo, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
         i.body.decrypt(secret_key).unwrap();
 
         let data = match &i.body {
-            Body::Cleartext(b) => IotData::decode_data(b)?,
+            Body::Cleartext(b) => IotData::decode_data(&b)?,
             Body::Encrypted(_e) => return Err(IotError::NoSecretKey),
             Body::None => return Err(IotError::NoBody),
         };

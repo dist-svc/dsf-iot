@@ -1,8 +1,10 @@
-use std::str::FromStr;
+use core::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "alloc")]
+use alloc::prelude::v1::*;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
 pub enum EndpointValue {
     /// Boolean value
     Bool(bool),
@@ -38,8 +40,8 @@ impl From<Vec<u8>> for EndpointValue {
     }
 }
 
-impl std::fmt::Display for EndpointValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for EndpointValue {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             EndpointValue::Text(v) => write!(f, "{}", v),
             EndpointValue::Float32(v) => write!(f, "{:.02}", v),

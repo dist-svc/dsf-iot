@@ -1,7 +1,9 @@
-use std::fmt::Write;
-use std::str::FromStr;
+use core::fmt::Write;
+use core::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "alloc")]
+use crate::alloc::prelude::v1::*;
+
 
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
@@ -12,7 +14,8 @@ pub const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
 
 /// Endpoint Kind specifies the type of IoT endpoint. For example,
 /// Temperature, Heart-Rate
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
 pub enum EndpointKind {
     /// Temperature in (degrees Celcius)
     Temperature,
@@ -25,6 +28,7 @@ pub enum EndpointKind {
 }
 
 /// Parse an endpoint kind from a string
+#[cfg(feature = "std")]
 pub fn parse_endpoint_kind(src: &str) -> Result<EndpointKind, String> {
     // Coerce to lower case
     let src = src.to_lowercase();
@@ -69,12 +73,12 @@ impl EndpointKind {
 }
 
 impl core::str::FromStr for EndpointKind {
-    type Err = String;
+    type Err = &'static str;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
         match ENDPOINT_KINDS.iter().find(|(_k, s, _u, _i)| src == *s) {
             Some(e) => Ok(e.0),
-            None => Err(format!("No matching endpoint name found")),
+            None => Err("No matching endpoint name found"),
         }
     }
 }

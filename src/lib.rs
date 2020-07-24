@@ -2,8 +2,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(feature = "alloc", feature(alloc_prelude))]
 
-
 #[cfg(feature = "alloc")]
+#[macro_use]
 extern crate alloc;
 
 pub mod endpoint;
