@@ -1,21 +1,20 @@
-
-use core::convert::{TryInto, TryFrom};
+use core::convert::{TryFrom, TryInto};
 
 use futures::prelude::*;
-use log::{debug};
+use log::debug;
 
 use dsf_client::prelude::*;
 use dsf_rpc::{self as rpc, LocateInfo, PublishInfo};
 
-use dsf_core::prelude::*;
 use dsf_core::api::ServiceHandle;
+use dsf_core::prelude::*;
 use dsf_core::types::DataKind;
 
 pub use dsf_client::{Error, Options};
 pub use dsf_rpc::ServiceIdentifier;
 
-use crate::service::*;
 use crate::error::IotError;
+use crate::service::*;
 
 pub mod options;
 pub use options::*;

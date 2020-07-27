@@ -1,5 +1,3 @@
-
-
 #[derive(Debug)]
 pub enum IotError {
     #[cfg(feature = "std")]
@@ -11,7 +9,6 @@ pub enum IotError {
     NoBody,
     UnrecognisedEndpoint,
 }
-
 
 #[cfg(feature = "std")]
 impl From<dsf_client::Error> for IotError {

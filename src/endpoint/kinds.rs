@@ -4,7 +4,6 @@ use core::str::FromStr;
 #[cfg(feature = "alloc")]
 use crate::alloc::prelude::v1::*;
 
-
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
     (EndpointKind::Temperature, "temperature", "°C", 1),
@@ -15,7 +14,7 @@ pub const ENDPOINT_KINDS: &[(EndpointKind, &str, &str, u16)] = &[
 /// Endpoint Kind specifies the type of IoT endpoint. For example,
 /// Temperature, Heart-Rate
 #[derive(Debug, Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum EndpointKind {
     /// Temperature in (degrees Celcius)
     Temperature,

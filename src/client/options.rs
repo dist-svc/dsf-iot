@@ -11,9 +11,8 @@ pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, 
 use dsf_rpc::ServiceIdentifier;
 
 use crate::endpoint::*;
-use crate::service::*;
 use crate::error::IotError;
-
+use crate::service::*;
 
 #[derive(Debug, Clone, StructOpt)]
 pub enum Command {

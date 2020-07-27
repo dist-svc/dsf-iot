@@ -1,11 +1,10 @@
-use core::convert::{TryFrom};
+use core::convert::TryFrom;
 
 #[cfg(feature = "dsf_rpc")]
 use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
 
 use dsf_core::base::Body;
 use dsf_core::types::*;
-
 
 #[cfg(feature = "alloc")]
 use alloc::prelude::v1::*;
@@ -37,7 +36,6 @@ pub struct IotService {
     pub meta: Vec<(String, String)>,
 }
 
-
 #[cfg(feature = "dsf_rpc")]
 impl TryFrom<ServiceInfo> for IotService {
     type Error = IotError;
@@ -64,7 +62,10 @@ impl TryFrom<ServiceInfo> for IotService {
 }
 
 impl IotService {
-    pub fn encode_body(endpoints: &[EndpointDescriptor], buff: &mut[u8]) -> Result<usize, IotError> {
+    pub fn encode_body(
+        endpoints: &[EndpointDescriptor],
+        buff: &mut [u8],
+    ) -> Result<usize, IotError> {
         let mut index = 0;
 
         // Encode each endpoint entry
@@ -104,7 +105,7 @@ pub struct IotData {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct DataInfo {
     pub service: Id,
 

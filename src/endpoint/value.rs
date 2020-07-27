@@ -4,7 +4,7 @@ use core::str::FromStr;
 use alloc::prelude::v1::*;
 
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum EndpointValue {
     /// Boolean value
     Bool(bool),

@@ -1,9 +1,7 @@
-
-
 #[cfg(feature = "alloc")]
 use alloc::prelude::v1::*;
 
-use log::{trace, debug, info, warn, error};
+use log::{debug, error, info, trace, warn};
 
 use byteorder::{ByteOrder, NetworkEndian};
 
@@ -27,7 +25,7 @@ pub mod iot_option_kinds {
 
 /// An endpoint descriptor defines the kind of an endpoint
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct EndpointDescriptor {
     /// Endpoint Data Kind
     pub kind: EndpointKind,
@@ -38,7 +36,7 @@ pub struct EndpointDescriptor {
 
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))] 
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct EndpointData {
     // Measurement value
     pub value: EndpointValue,
@@ -73,14 +71,22 @@ impl EndpointDescriptor {
 
         // TODO: read metadata
 
-        Ok((Self { kind, meta: Vec::new() }, len as usize))
+        Ok((
+            Self {
+                kind,
+                meta: Vec::new(),
+            },
+            len as usize,
+        ))
     }
 
     pub fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
-
         // Write option header (option kind and length)
         NetworkEndian::write_u16(&mut data[0..], iot_option_kinds::ENDPOINT_DESCRIPTOR);
-        NetworkEndian::write_u16(&mut data[2..], iot_option_kinds::ENDPOINT_DESCRIPTOR_LEN as u16);
+        NetworkEndian::write_u16(
+            &mut data[2..],
+            iot_option_kinds::ENDPOINT_DESCRIPTOR_LEN as u16,
+        );
 
         // Write option data (endpoint kind, reserved flags)
         NetworkEndian::write_u16(&mut data[4..], u16::from(&self.kind));
@@ -169,7 +175,7 @@ impl EndpointData {
 
                 NetworkEndian::write_u16(&mut data[0..], VALUE_STRING);
                 NetworkEndian::write_u16(&mut data[2..], b.len() as u16);
-                (&mut data[4..4+b.len()]).copy_from_slice(b);
+                (&mut data[4..4 + b.len()]).copy_from_slice(b);
                 4 + b.len()
             }
             _ => unimplemented!(),

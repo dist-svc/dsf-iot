@@ -1,4 +1,3 @@
-
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(feature = "alloc", feature(alloc_prelude))]
 
@@ -7,8 +6,8 @@
 extern crate alloc;
 
 pub mod endpoint;
-pub mod service;
 pub mod error;
+pub mod service;
 
 pub mod prelude;
 
