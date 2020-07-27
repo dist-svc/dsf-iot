@@ -79,8 +79,12 @@ impl EndpointDescriptor {
             len as usize,
         ))
     }
+}
 
-    pub fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
+impl dsf_core::base::Encode for EndpointDescriptor {
+    type Error = OptionsError;
+
+    fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
         // Write option header (option kind and length)
         NetworkEndian::write_u16(&mut data[0..], iot_option_kinds::ENDPOINT_DESCRIPTOR);
         NetworkEndian::write_u16(
@@ -114,8 +118,6 @@ impl EndpointData {
 
     pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
         use iot_option_kinds::*;
-
-        info!("Decoding: {:x?}", data);
 
         // Read option header (kind and length)
         let kind = NetworkEndian::read_u16(&data[0..]);

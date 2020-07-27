@@ -1,9 +1,11 @@
 use core::convert::TryFrom;
 
+use bytes::BufMut;
+
 #[cfg(feature = "dsf_rpc")]
 use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
 
-use dsf_core::base::Body;
+use dsf_core::base::{Body, Encode};
 use dsf_core::types::*;
 
 #[cfg(feature = "alloc")]
@@ -137,8 +139,7 @@ impl IotData {
         Ok(s)
     }
 
-    pub fn encode_data(data: &[EndpointData]) -> Result<Vec<u8>, IotError> {
-        let mut buff = vec![0u8; 1024];
+    pub fn encode_data(data: &[EndpointData], buff: &mut [u8]) -> Result<usize, IotError> {
         let mut index = 0;
 
         // Encode each endpoint entry
@@ -146,7 +147,7 @@ impl IotData {
             index += ed.encode(&mut buff[index..])?;
         }
 
-        Ok(buff[0..index].to_vec())
+        Ok(index)
     }
 
     pub fn decode_data(buff: &[u8]) -> Result<Vec<EndpointData>, IotError> {
