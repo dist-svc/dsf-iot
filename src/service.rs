@@ -1,18 +1,19 @@
 use core::convert::TryFrom;
 
-use bytes::BufMut;
-
-#[cfg(feature = "dsf_rpc")]
-use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
-
-use dsf_core::base::{Body, Encode};
-use dsf_core::types::*;
-
 #[cfg(feature = "alloc")]
 use alloc::prelude::v1::*;
 
 #[cfg(feature = "alloc")]
 use alloc::vec;
+
+use dsf_core::base::{Body, Encode};
+use dsf_core::types::*;
+
+#[cfg(feature = "dsf-rpc")]
+use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
+
+#[cfg(feature = "dsf-rpc")]
+use dsf_rpc::data::DataInfo;
 
 use crate::endpoint::*;
 use crate::error::IotError;
@@ -30,15 +31,15 @@ pub struct IotService {
     pub secret_key: Option<SecretKey>,
 
     /// Service endpoint information
-    #[cfg_attr(feature = "structopt", structopt(long, parse(try_from_str=parse_endpoint_descriptor)))]
+    #[cfg_attr(feature = "structopt", structopt(long, parse(try_from_str = parse_endpoint_descriptor)))]
     pub endpoints: Vec<EndpointDescriptor>,
 
     /// Service metadata
-    #[cfg_attr(feature = "structopt", structopt(long = "meta", parse(try_from_str = try_parse_key_value)))]
+    #[cfg_attr(feature = "structopt", structopt(long, parse(try_from_str = try_parse_key_value)))]
     pub meta: Vec<(String, String)>,
 }
 
-#[cfg(feature = "dsf_rpc")]
+#[cfg(feature = "dsf-rpc")]
 impl TryFrom<ServiceInfo> for IotService {
     type Error = IotError;
 
@@ -106,19 +107,8 @@ pub struct IotData {
     pub meta: Vec<(String, String)>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct DataInfo {
-    pub service: Id,
-
-    pub index: u16,
-    pub body: Body,
-
-    pub previous: Option<Signature>,
-    pub signature: Signature,
-}
-
 impl IotData {
+    #[cfg(feature = "dsf-rpc")]
     pub fn decode(mut i: DataInfo, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
         i.body.decrypt(secret_key).unwrap();
 

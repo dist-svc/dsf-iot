@@ -1,7 +1,7 @@
 #[cfg(feature = "alloc")]
 use alloc::prelude::v1::*;
 
-use log::{debug, error, info, trace, warn};
+use log::{error, trace, warn};
 
 use byteorder::{ByteOrder, NetworkEndian};
 

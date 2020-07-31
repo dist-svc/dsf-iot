@@ -3,6 +3,8 @@ use core::convert::TryInto;
 #[cfg(feature = "alloc")]
 use alloc::prelude::v1::*;
 
+use bytes::BytesMut;
+
 use structopt::StructOpt;
 
 use dsf_core::base::NewBody;
@@ -73,12 +75,14 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
 
     // Generate an RPC create message for an IoT service instance
     fn try_into(self) -> Result<dsf_rpc::CreateOptions, Self::Error> {
-        let body = IotService::encode_body(&self.endpoints)?;
+        let mut body = BytesMut::new();
+
+        let n = IotService::encode_body(&self.endpoints, &mut body)?;
 
         let co = dsf_rpc::CreateOptions {
             application_id: IOT_APP_ID,
             page_kind: Some(IOT_SERVICE_PAGE_KIND),
-            body: Some(NewBody::Cleartext(body)),
+            body: Some(NewBody::Cleartext((&body[..n]).to_vec())),
             metadata: self.meta.clone(),
             public: self.public,
             register: self.register,
@@ -108,12 +112,14 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
 
     // Generate an RPC create message for an IoT service instance
     fn try_into(self) -> Result<dsf_rpc::PublishOptions, Self::Error> {
-        let data = IotData::encode_data(&self.data)?;
+        let mut body = BytesMut::new();
+
+        let n = IotData::encode_data(&self.data, &mut body)?;
 
         let po = dsf_rpc::PublishOptions {
             service: self.service,
             kind: None,
-            data: Some(data),
+            data: Some((&body[..n]).to_vec()),
         };
 
         Ok(po)
