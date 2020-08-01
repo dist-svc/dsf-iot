@@ -145,10 +145,7 @@ impl IotClient {
 
         let mut data_info = self.client.data(options).await?;
 
-        let iot_data = data_info
-            .drain(..)
-            .map(|v| IotData::decode(v, iot_info.secret_key.as_ref()).unwrap())
-            .collect();
+        let iot_data = data_info.drain(..).map(|v| {}).collect();
 
         debug!("Result: {:#?}", iot_data);
 
