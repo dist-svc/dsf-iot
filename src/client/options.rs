@@ -8,6 +8,7 @@ use bytes::BytesMut;
 use structopt::StructOpt;
 
 use dsf_core::base::NewBody;
+use dsf_core::types::DataKind;
 
 pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
 use dsf_rpc::ServiceIdentifier;
@@ -118,7 +119,7 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
 
         let po = dsf_rpc::PublishOptions {
             service: self.service,
-            kind: None,
+            kind: DataKind::Iot,
             data: Some((&body[..n]).to_vec()),
         };
 
