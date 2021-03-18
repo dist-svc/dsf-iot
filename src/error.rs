@@ -1,9 +1,9 @@
 #[derive(Debug)]
 pub enum IotError {
+    Core(dsf_core::error::Error),
+
     #[cfg(feature = "std")]
     Client(dsf_client::Error),
-
-    Options(dsf_core::options::OptionsError),
 
     NoSecretKey,
     NoBody,
@@ -17,8 +17,8 @@ impl From<dsf_client::Error> for IotError {
     }
 }
 
-impl From<dsf_core::options::OptionsError> for IotError {
-    fn from(o: dsf_core::options::OptionsError) -> Self {
-        Self::Options(o)
+impl From<dsf_core::error::Error> for IotError {
+    fn from(o: dsf_core::error::Error) -> Self {
+        Self::Core(o)
     }
 }

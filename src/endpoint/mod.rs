@@ -5,7 +5,8 @@ use log::{error, trace, warn};
 
 use byteorder::{ByteOrder, NetworkEndian};
 
-use dsf_core::options::{Metadata, OptionsError};
+use dsf_core::error::Error;
+use dsf_core::options::Metadata;
 
 pub mod kinds;
 pub use kinds::*;
@@ -53,7 +54,7 @@ impl EndpointDescriptor {
         }
     }
 
-    pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
+    pub fn parse(data: &[u8]) -> Result<(Self, usize), Error> {
         trace!("Parsing: {:x?}", data);
 
         // Read option header (kind and length)
@@ -61,7 +62,7 @@ impl EndpointDescriptor {
 
         if option_kind != iot_option_kinds::ENDPOINT_DESCRIPTOR {
             warn!("Unrecognised option kind: {}", option_kind);
-            return Err(OptionsError::InvalidOptionKind);
+            return Err(Error::InvalidOption);
         }
         let len = NetworkEndian::read_u16(&data[2..]) + 4;
 
@@ -82,9 +83,9 @@ impl EndpointDescriptor {
 }
 
 impl dsf_core::base::Encode for EndpointDescriptor {
-    type Error = OptionsError;
+    type Error = Error;
 
-    fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
+    fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
         // Write option header (option kind and length)
         NetworkEndian::write_u16(&mut data[0..], iot_option_kinds::ENDPOINT_DESCRIPTOR);
         NetworkEndian::write_u16(
@@ -116,7 +117,7 @@ impl EndpointData {
         }
     }
 
-    pub fn parse(data: &[u8]) -> Result<(Self, usize), OptionsError> {
+    pub fn parse(data: &[u8]) -> Result<(Self, usize), Error> {
         use iot_option_kinds::*;
 
         // Read option header (kind and length)
@@ -136,7 +137,7 @@ impl EndpointData {
             }
             _ => {
                 error!("Unrecognised option kind: 0x{:x?}", kind);
-                return Err(OptionsError::InvalidOptionKind);
+                return Err(Error::InvalidOption);
             }
         };
 
@@ -151,7 +152,7 @@ impl EndpointData {
         ))
     }
 
-    pub fn encode(&self, data: &mut [u8]) -> Result<usize, OptionsError> {
+    pub fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
         use iot_option_kinds::*;
 
         // Write option header and data
