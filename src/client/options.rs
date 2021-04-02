@@ -39,6 +39,9 @@ pub enum Command {
 
     /// List known IoT services
     List(ListOptions),
+
+    /// Generate a service ID / key for manual loading
+    Generate,
 }
 
 #[derive(Debug, Clone, StructOpt)]

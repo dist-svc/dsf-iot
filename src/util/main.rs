@@ -49,6 +49,23 @@ fn main() {
 
     info!("opts: {:?}", opts);
 
+    // Unconnected commands
+    match &opts.cmd {
+        Command::Generate => {
+            println!("Generating keys: ");
+
+            let (id, keys) = IotClient::generate().unwrap();
+
+            println!("ID: {}", id);
+            println!("Public key: {}", keys.pub_key);
+            println!("Private key: {}", keys.pri_key.unwrap());
+            println!("Secret key: {}", keys.sec_key.unwrap());
+
+            return;
+        },
+        _ => (),
+    }
+
     let res: Result<(), IotError> = task::block_on(async {
         // Create client connector
         let mut c = match IotClient::new(&opts.client_options) {
@@ -95,6 +112,7 @@ fn main() {
                     info!("{:?}", i);
                 }
             }
+            _ => unreachable!(),
         }
 
         Ok(())

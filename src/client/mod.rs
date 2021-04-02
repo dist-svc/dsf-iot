@@ -164,4 +164,20 @@ impl IotClient {
         // TODO: decode endpoint info here
         Ok(resp.map(|_d| ()))
     }
+
+    pub fn generate() -> Result<(Id, Keys), ClientError> {
+        use dsf_core::crypto;
+        
+        let (pub_key, pri_key) = crypto::new_pk()?;
+        let id = crypto::hash(&pub_key)?;
+        let sec_key = crypto::new_sk()?;
+
+        let keys = Keys{
+            pub_key, 
+            pri_key: Some(pri_key), 
+            sec_key: Some(sec_key), 
+            sym_keys: None};
+
+        Ok((id, keys))
+    }
 }
