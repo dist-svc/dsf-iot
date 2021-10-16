@@ -7,13 +7,14 @@ use bytes::BytesMut;
 
 use structopt::StructOpt;
 
-use dsf_core::base::NewBody;
+use dsf_core::base::MaybeEncrypted;
 use dsf_core::types::DataKind;
+use dsf_core::options::Options;
 
 pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
 use dsf_rpc::ServiceIdentifier;
 
-use crate::endpoint::*;
+use crate::endpoint::{self as ep, parse_endpoint_descriptor, parse_endpoint_data};
 use crate::error::IotError;
 use crate::service::*;
 
@@ -31,6 +32,9 @@ pub enum Command {
     /// Locate an IoT service
     Locate(LocateOptions),
 
+    /// Fetch IoT service information
+    Info(InfoOptions),
+
     /// Subscribe to a known IoT service
     Subscribe(SubscribeOptions),
 
@@ -41,14 +45,17 @@ pub enum Command {
     List(ListOptions),
 
     /// Generate a service ID / key for manual loading
-    Generate,
+    GenKeys,
+
+    /// Encode iot data objects
+    Encode(EncodeOptions),
 }
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct CreateOptions {
     /// Service endpoint information
     #[structopt(long, parse(try_from_str=parse_endpoint_descriptor))]
-    pub endpoints: Vec<EndpointDescriptor>,
+    pub endpoints: Vec<ep::Descriptor>,
 
     /// Service metadata
     #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
@@ -86,7 +93,7 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
         let co = dsf_rpc::CreateOptions {
             application_id: IOT_APP_ID,
             page_kind: Some(IOT_SERVICE_PAGE_KIND),
-            body: Some(NewBody::Cleartext((&body[..n]).to_vec())),
+            body: Some(MaybeEncrypted::Cleartext((&body[..n]).to_vec())),
             metadata: self.meta.clone(),
             public: self.public,
             register: self.register,
@@ -104,7 +111,7 @@ pub struct PublishOptions {
 
     /// Measurement values (these must correspond with service endpoints)
     #[structopt(short, long, parse(try_from_str = parse_endpoint_data))]
-    pub data: Vec<EndpointData>,
+    pub data: Vec<ep::Data>,
 
     /// Measurement metadata
     #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
@@ -138,3 +145,32 @@ pub type ListOptions = dsf_rpc::service::ListOptions;
 
 /// InfoOptions used to fetch info for services
 pub type InfoOptions = dsf_rpc::service::InfoOptions;
+
+#[derive(Debug, Clone, StructOpt)]
+pub struct EncodeOptions {
+    #[structopt(flatten)]
+    pub create: CreateOptions,
+
+    /// File name to write encoded service
+    #[structopt(long)]
+    pub file: Option<String>,
+}
+
+#[derive(Debug, Clone, StructOpt)]
+pub struct DecodeOptions {
+    /// File name to parse encoded iot data
+    #[structopt(long)]
+    pub file: Option<String>,
+}
+
+/// IoT Metadata mapping from structopt to an options list
+#[derive(Debug, Clone, StructOpt)]
+pub struct MetaOptions {
+
+}
+
+impl Into<Vec<Options>> for MetaOptions {
+    fn into(self) -> Vec<Options> {
+        todo!()
+    }
+}

@@ -1,4 +1,6 @@
 extern crate structopt;
+use std::any;
+
 use structopt::StructOpt;
 
 extern crate futures;
@@ -13,7 +15,7 @@ extern crate humantime;
 extern crate tracing;
 
 extern crate tracing_subscriber;
-use tracing_subscriber::filter::{EnvFilter, LevelFilter};
+use tracing_subscriber::filter::{LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
 use dsf_iot::prelude::*;
@@ -30,28 +32,26 @@ struct Config {
     #[structopt(flatten)]
     client_options: Options,
 
-    #[structopt(long = "log-level", default_value = "info")]
+    #[structopt(long, default_value = "info")]
     /// Enable verbose logging
-    level: LevelFilter,
+    log_level: LevelFilter,
 }
 
-fn main() {
+#[async_std::main]
+async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
     let opts = Config::from_args();
 
-    let filter = EnvFilter::from_default_env().add_directive("async_std=warn".parse().unwrap());
-
     // Setup logging
     let _ = FmtSubscriber::builder()
-        .with_max_level(opts.level.clone())
-        .with_env_filter(filter)
+        .with_max_level(opts.log_level.clone())
         .try_init();
 
-    info!("opts: {:?}", opts);
+    debug!("opts: {:?}", opts);
 
     // Unconnected commands
     match &opts.cmd {
-        Command::Generate => {
+        Command::GenKeys => {
             println!("Generating keys: ");
 
             let (id, keys) = IotClient::generate().unwrap();
@@ -61,86 +61,95 @@ fn main() {
             println!("Private key: {}", keys.pri_key.unwrap());
             println!("Secret key: {}", keys.sec_key.unwrap());
 
-            return;
+            return Ok(());
         },
+        Command::Encode(opts) => {
+            IotClient::encode(opts)?;
+
+            return Ok(())
+        }
         _ => (),
     }
 
-    let res: Result<(), IotError> = task::block_on(async {
-        // Create client connector
-        let mut c = match IotClient::new(&opts.client_options) {
-            Ok(c) => c,
-            Err(e) => {
-                error!(
-                    "Error connecting to daemon on '{}': {:?}",
-                    &opts.client_options.daemon_socket, e
-                );
-                return Err(e);
-            }
-        };
-
-        // Execute commands
-        match opts.cmd {
-            Command::Create(o) => {
-                let res = c.create(o).await?;
-                info!("{:?}", res);
-            }
-            Command::Locate(o) => {
-                let res = c.search(&o.id).await?;
-                info!("{:?}", res);
-            }
-            Command::List(o) => {
-                let res = c.list(o).await?;
-                print_service_list(&res);
-            }
-            Command::Register(o) => {
-                let res = c.register(o).await?;
-                info!("{:?}", res);
-            }
-            Command::Publish(o) => {
-                let res = c.publish(o).await?;
-                info!("{:?}", res);
-            }
-            Command::Query(o) => {
-                let (service, data) = c.query(o).await?;
-                print_service_data(&service, &data);
-            }
-            Command::Subscribe(o) => {
-                let mut res = c.subscribe(o).await?;
-
-                for i in res.next().await {
-                    info!("{:?}", i);
-                }
-            }
-            _ => unreachable!(),
+    // Create client connector
+    let mut c = match IotClient::new(&opts.client_options) {
+        Ok(c) => c,
+        Err(e) => {
+            error!(
+                "Error connecting to daemon on '{}': {:?}",
+                &opts.client_options.daemon_socket, e
+            );
+            return Err(e.into());
         }
+    };
 
-        Ok(())
-    });
+    // Execute commands
+    match opts.cmd {
+        Command::Create(o) => {
+            let res = c.create(o).await?;
+            info!("{:?}", res);
+        }
+        Command::Locate(o) => {
+            let (_h, s) = c.search(&o.id).await?;
+            println!("Located service");
+            print_service_list(&[s]);
 
-    if let Err(e) = res {
-        error!("{:?}", e);
+        }
+        Command::Info(o) => {
+            let res = c.info(o).await?;
+            print_service_list(&[res]);
+        }
+        Command::List(o) => {
+            let res = c.list(o).await?;
+            print_service_list(&res);
+        }
+        Command::Register(o) => {
+            let res = c.register(o).await?;
+            println!("{:?}", res);
+        }
+        Command::Publish(o) => {
+            let res = c.publish(o).await?;
+            println!("{:?}", res);
+        }
+        Command::Query(o) => {
+            let (service, data) = c.query(o).await?;
+            print_service_data(&service, &data);
+        }
+        Command::Subscribe(o) => {
+            let mut res = c.subscribe(o).await?;
+
+            for i in res.next().await {
+                info!("{:?}", i);
+            }
+        }
+        _ => unreachable!(),
     }
+
+    Ok(())
+ 
 }
 
 fn print_service_list(services: &[IotService]) {
     for s in services {
-        println!("Service: {}", s.id);
+        println!("Service ID: {}", s.id);
         println!("Endpoints: ");
         for i in 0..s.endpoints.len() {
             let e = &s.endpoints[i];
 
-            println!("  - {}: {:?} (metadata: {:?})", i, e.kind, e.meta);
+            println!("  - {:2}: {:16} in {:4} (metadata: {:?})", i, e.kind, e.kind.unit(), e.meta);
         }
     }
 }
 
 fn print_service_data(service: &IotService, data: &[IotData]) {
-    println!("Service: {}", service.id);
+    println!("Service ID: {}", service.id);
     println!("Data: ");
 
     for d in data {
-        println!("Object {} (previous: {:?})", d.signature, d.previous);
+        let sig = d.signature.to_string();
+        let prev = d.previous.as_ref().map(|v| v.to_string() ).unwrap_or("none".to_string());
+
+        println!("Object: {} index: {} (previous: {})", &sig[..16], d.index, prev);
 
         for i in 0..d.data.len() {
             let ep_info = &service.endpoints[i];

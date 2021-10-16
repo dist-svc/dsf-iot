@@ -1,10 +1,15 @@
 use core::convert::{TryFrom, TryInto};
 
 use futures::prelude::*;
-use log::debug;
+use log::{debug, info, warn};
+
+use bytes::BytesMut;
+
+#[cfg(feature="alloc")]
+use pretty_hex::*;
 
 use dsf_client::prelude::*;
-use dsf_rpc::{self as rpc, LocateInfo, PublishInfo};
+use dsf_rpc::{self as rpc, PublishInfo};
 
 use dsf_core::api::ServiceHandle;
 use dsf_core::prelude::*;
@@ -12,6 +17,7 @@ use dsf_core::types::DataKind;
 
 pub use dsf_client::{Error, Options};
 pub use dsf_rpc::ServiceIdentifier;
+use rpc::FetchOptions;
 
 use crate::error::IotError;
 use crate::service::*;
@@ -54,15 +60,18 @@ impl IotClient {
     }
 
     /// Search for an existing IoT service
-    pub async fn search(&mut self, id: &Id) -> Result<(ServiceHandle, LocateInfo), IotError> {
-        let r = self
+    pub async fn search(&mut self, id: &Id) -> Result<(ServiceHandle, IotService), IotError> {
+        let (h, _i) = self
             .client
             .locate(LocateOptions {
                 id: id.clone(),
                 local_only: false,
             })
             .await?;
-        Ok(r)
+
+        let i = self.info(InfoOptions{ service: ServiceIdentifier::id(id.clone()) }).await?;
+
+        Ok((h, i))
     }
 
     /// List known IoT services
@@ -71,14 +80,39 @@ impl IotClient {
             application_id: Some(IOT_APP_ID),
         };
 
-        let mut r = self.client.list(req).await?;
+        let services = self.client.list(req).await?;
 
-        let s = r
-            .drain(..)
-            .map(|v| IotService::try_from(v).unwrap())
-            .collect();
+        debug!("Received service list: {:?}", services);
+        
+        let mut iot_services = Vec::with_capacity(services.len());
 
-        Ok(s)
+        for i in &services {
+            // Fetch page signature from service info
+            let page_sig = match &i.primary_page {
+                Some(p) => p,
+                None => {
+                    warn!("No primary page signature for service: {}", i.id);
+                    continue;
+                }
+            };
+
+            // Fetch page by signature
+            let p = self.client.page(FetchOptions{
+                service: i.id.clone().into(),
+                page_sig: page_sig.clone() }).await?;
+
+            // Build IoT service object
+            let iot_svc = match IotService::decode_page(i, p) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Failed to decode page {} for service {}", page_sig, i.id);
+                    continue;
+                },
+            };
+
+            iot_services.push(iot_svc);
+        }
+        Ok(iot_services)
     }
 
     /// Register an existing service in the database
@@ -92,11 +126,23 @@ impl IotClient {
 
     /// Fetch service information
     pub async fn info(&mut self, options: InfoOptions) -> Result<IotService, IotError> {
-        let (_h, mut i) = self.client.info(options).await?;
+        // Fetch service info object
+        let (h, i) = self.client.info(options).await?;
 
-        i.body.decrypt(i.secret_key.as_ref()).unwrap();
+        // Check we have a primary page object
+        let page_sig = match &i.primary_page {
+            Some(s) => s,
+            None => return Err(IotError::Client(Error::NoPageFound)),
+        };
 
-        IotService::try_from(i)
+        // Lookup page object
+        let p = self.client.page(FetchOptions{service: h.into(), page_sig: page_sig.clone() }).await?;
+
+        // TODO: Decrypt if possible / required
+        //i.body.decrypt(i.secret_key.as_ref()).unwrap();
+
+        // Coerce object into IotService
+        IotService::decode_page(&i, p)
     }
 
     /// Publish raw data using an existing IoT service
@@ -143,13 +189,13 @@ impl IotClient {
             })
             .await?;
 
+        debug!("info: {:?}", iot_info);
+
         let mut data_info = self.client.data(options).await?;
 
         let iot_data = data_info.drain(..).filter_map(|v| {
             IotData::decode(v, None).ok()
         }).collect();
-
-        debug!("Result: {:#?}", iot_data);
 
         Ok((iot_info, iot_data))
     }
@@ -159,6 +205,8 @@ impl IotClient {
         &mut self,
         options: rpc::SubscribeOptions,
     ) -> Result<impl Stream<Item = ()>, ClientError> {
+        debug!("Subscribe to service: {:?}", options);
+
         let resp = self.client.subscribe(options).await?;
 
         // TODO: decode endpoint info here
@@ -179,5 +227,45 @@ impl IotClient {
             sym_keys: None};
 
         Ok((id, keys))
+    }
+
+    pub fn encode(opts: &EncodeOptions) -> Result<(), IotError> {
+
+        debug!("Encoding endpoints: {:?}", opts.create.endpoints);
+        // Encode body
+        let mut body = vec![0u8; 1024];
+        let n = IotService::encode_body(&opts.create.endpoints, &mut body)?;
+
+        // TODO: Encode meta
+
+        debug!("Building service");
+
+        // Create service object
+        let mut s = ServiceBuilder::default()
+            .body(Body::Cleartext((&body[..n]).to_vec()))
+            .build()?;
+
+        debug!("Generating service page");
+
+        // Encode generate service page
+        let mut buff = vec![0u8; 1024];
+        let (n, p) = s.publish_primary(&mut buff)?;
+
+        info!("Created page: {:?}", p);
+
+        #[cfg(feature="alloc")]
+        info!("Data: {:?}", buff.hex_dump());
+
+        if let Some(f) = &opts.file {
+            info!("Writing to file: {}", f);
+
+            std::fs::write(f, &buff[..n])?;
+        }
+
+        Ok(())
+    }
+
+    pub fn decode(opts: DecodeOptions) -> Result<(), Error> {
+        todo!()
     }
 }

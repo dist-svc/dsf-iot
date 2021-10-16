@@ -6,34 +6,44 @@ edition = "2018"
 
 
 [features]
-client = ["std", "async-std", "serde", "futures", "dsf-rpc", "dsf-client", "chrono-english", "chrono", "tracing", "tracing-subscriber", "structopt", "humantime" ]
+client = ["std", "async-std", "serde", "futures", "dsf-rpc", "dsf-client", "chrono-english", "chrono", "tracing", "tracing-subscriber", "structopt", "humantime", "strum", "strum_macros", "anyhow", "thiserror" ]
 util = [ "client" ]
 
-std = [ "dsf-core/std", "dsf-rpc", "dsf-client" ]
-alloc = [ "dsf-core/alloc" ]
+std = [ "dsf-core/std", "dsf-rpc", "dsf-client", "thiserror" ]
+alloc = [ "dsf-core/alloc", "pretty-hex/alloc" ]
 
 default = [ "client", "util", "std" ]
 
+# Debian package configuration (for cargo-deb)
+[package.metadata.deb]
+priority = "optional"
+depends = "$auto, openssl"
+assets = [
+    ["target/release/dsf-iot", "/usr/bin/dsf-iot", "0755"],
+]
 
 [dependencies]
-
-
 bytes = { version = "1.0.1", default_features = false }
 byteorder = { version = "1.3.4", default_features = false }
 log = "0.4.8"
 managed = { version = "*", default_features = false }
-
+bitflags = "1.3.2"
 
 serde = { version = "1.0.104", optional = true }
 structopt = { version = "0.3.8", optional = true }
 futures = { version = "0.3.1", optional = true }
-async-std = { version = "1.4.0", optional = true }
+async-std = { version = "1.4.0", optional = true, features = ["attributes"] }
 chrono = { version = "0.4.10", optional = true }
 chrono-english = { version = "0.1.4", optional = true }
 tracing = { version = "*", optional = true }
 tracing-subscriber = { version = "*", optional = true }
 
 humantime = { version = "2.0.0", optional = true }
+strum = { version = "0.20.0", optional = true, default_features = false }
+strum_macros = { version = "0.20.1", optional = true }
+anyhow = { version = "1.0.44", optional = true }
+thiserror = { version = "*", optional = true }
+pretty-hex = { version = "0.2.1", default_features = false }
 
 
 [dependencies.dsf-core]
@@ -52,7 +62,7 @@ optional = true
 [dev-dependencies]
 linux-embedded-hal = "0.3.0"
 bme280 = "0.2.1"
-
+async-std = { version = "1.4.0", features = [ "attributes" ] }
 
 
 [[bin]]
@@ -67,5 +77,7 @@ required-features = ["util"]
 
 [patch.crates-io]
 dsf-core = { path = "../dsf-workspace/dsf-core" }
+dsf-rpc = { path = "../dsf-workspace/dsf-rpc" }
+dsf-client = { path = "../dsf-workspace/dsf-client" }
 
-sodiumoxide = { path = "../sodiumoxide" }
+#sodiumoxide = { path = "../sodiumoxide" }
