@@ -63,6 +63,7 @@ optional = true
 linux-embedded-hal = "0.3.0"
 bme280 = "0.2.1"
 async-std = { version = "1.4.0", features = [ "attributes" ] }
+simplelog = "0.10.2"
 
 
 [[bin]]

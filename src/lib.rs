@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(feature = "alloc", feature(alloc_prelude))]
+#![feature(generic_associated_types)]
 
 #[cfg(feature = "alloc")]
 #[macro_use]
