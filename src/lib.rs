@@ -14,6 +14,8 @@ pub mod prelude;
 #[cfg(feature = "client")]
 pub mod client;
 
+pub mod engine;
+
 pub const IOT_APP_ID: u16 = 1;
 
 pub const IOT_SERVICE_PAGE_KIND: u16 = 1;

@@ -6,13 +6,13 @@ edition = "2018"
 
 
 [features]
-client = ["std", "async-std", "serde", "futures", "dsf-rpc", "dsf-client", "chrono-english", "chrono", "tracing", "tracing-subscriber", "structopt", "humantime", "strum", "strum_macros", "anyhow", "thiserror" ]
-util = [ "client" ]
+client = ["std", "async-std", "serde", "futures", "dsf-rpc", "dsf-client", "chrono-english", "chrono", "tracing", "tracing-subscriber", "humantime", "strum", "strum_macros", "anyhow", "thiserror" ]
+util = [ "client", "structopt", "dsf-core/structopt" ]
 
 std = [ "dsf-core/std", "dsf-rpc", "dsf-client", "thiserror" ]
 alloc = [ "dsf-core/alloc", "pretty-hex/alloc" ]
 
-default = [ "client", "util", "std" ]
+default = [ "client", "util", "std", "alloc" ]
 
 # Debian package configuration (for cargo-deb)
 [package.metadata.deb]

@@ -8,8 +8,9 @@ use bytes::BytesMut;
 use structopt::StructOpt;
 
 use dsf_core::base::MaybeEncrypted;
-use dsf_core::types::DataKind;
+use dsf_core::types::{DataKind, SecretKey};
 use dsf_core::options::Options;
+use dsf_core::keys::Keys;
 
 pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
 use dsf_rpc::ServiceIdentifier;
@@ -49,6 +50,9 @@ pub enum Command {
 
     /// Encode iot data objects
     Encode(EncodeOptions),
+
+    /// Decode iot data objects
+    Decode(DecodeOptions),
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -151,6 +155,10 @@ pub struct EncodeOptions {
     #[structopt(flatten)]
     pub create: CreateOptions,
 
+    /// Keys for decoding
+    #[structopt(flatten)]
+    pub keys: Keys,
+
     /// File name to write encoded service
     #[structopt(long)]
     pub file: Option<String>,
@@ -160,7 +168,11 @@ pub struct EncodeOptions {
 pub struct DecodeOptions {
     /// File name to parse encoded iot data
     #[structopt(long)]
-    pub file: Option<String>,
+    pub file: String,
+
+    /// Keys for decoding
+    #[structopt(flatten)]
+    pub keys: Keys,
 }
 
 /// IoT Metadata mapping from structopt to an options list

@@ -20,6 +20,7 @@ pub use dsf_rpc::ServiceIdentifier;
 use rpc::FetchOptions;
 
 use crate::error::IotError;
+use crate::prelude::Descriptor;
 use crate::service::*;
 
 pub mod options;
@@ -102,7 +103,7 @@ impl IotClient {
                 page_sig: page_sig.clone() }).await?;
 
             // Build IoT service object
-            let iot_svc = match IotService::decode_page(i, p) {
+            let iot_svc = match IotService::decode_page(p, i.secret_key.as_ref()) {
                 Ok(v) => v,
                 Err(e) => {
                     warn!("Failed to decode page {} for service {}", page_sig, i.id);
@@ -142,7 +143,7 @@ impl IotClient {
         //i.body.decrypt(i.secret_key.as_ref()).unwrap();
 
         // Coerce object into IotService
-        IotService::decode_page(&i, p)
+        IotService::decode_page(p, i.secret_key.as_ref())
     }
 
     /// Publish raw data using an existing IoT service
@@ -221,7 +222,7 @@ impl IotClient {
         let sec_key = crypto::new_sk()?;
 
         let keys = Keys{
-            pub_key, 
+            pub_key: Some(pub_key), 
             pri_key: Some(pri_key), 
             sec_key: Some(sec_key), 
             sym_keys: None};
@@ -241,9 +242,25 @@ impl IotClient {
         debug!("Building service");
 
         // Create service object
-        let mut s = ServiceBuilder::default()
-            .body(Body::Cleartext((&body[..n]).to_vec()))
-            .build()?;
+        let mut sb = ServiceBuilder::default()
+            .body(Body::Cleartext((&body[..n]).to_vec()));
+
+        // Inject private key if provided
+        if let Some(pri_key) = &opts.keys.pri_key {
+            sb = sb.private_key(pri_key.clone());
+        }
+
+        // Setup encryption
+        if let Some(sec_key) = &opts.keys.sec_key {
+            sb = sb.secret_key(sec_key.clone());
+        } else if !opts.create.public {
+            sb = sb.encrypt()
+        }
+
+        let mut s = sb.build()?;
+
+        info!("New service (id: {} pri: {} sec: {:?}", 
+                s.id(), s.private_key().unwrap(), s.secret_key());
 
         debug!("Generating service page");
 
@@ -253,8 +270,10 @@ impl IotClient {
 
         info!("Created page: {:?}", p);
 
+        info!("Encoded {} bytes", n);
+
         #[cfg(feature="alloc")]
-        info!("Data: {:?}", buff.hex_dump());
+        info!("Data: {:?}", (&buff[..n]).hex_dump());
 
         if let Some(f) = &opts.file {
             info!("Writing to file: {}", f);
@@ -265,7 +284,41 @@ impl IotClient {
         Ok(())
     }
 
-    pub fn decode(opts: DecodeOptions) -> Result<(), Error> {
-        todo!()
+    pub fn decode(opts: &DecodeOptions) -> Result<(), IotError> {
+        
+        debug!("Reading file: {}", opts.file);
+        let buff = std::fs::read(&opts.file)?;
+
+        debug!("Decoding page (keys: {:?})", opts.keys);
+        let p = Page::decode_pages(&buff, &opts.keys)?;
+
+        info!("Decoded pages: {:?}", p);
+
+        debug!("Loading service");
+
+        let s = Service::load(&p[0])?;
+
+        debug!("Loading IoT data");
+
+        if let MaybeEncrypted::Cleartext(b) = p[0].body() {
+            let eps = IotService::decode_body(b)?;
+            println!("{}", Descriptor::display(&eps));
+
+        } else {
+            warn!("Encrypted or missing body, unable to parse endpoints");
+        }
+
+        Ok(())
     }
+}
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn test_encode_decode() {
+        
+
+    }
+
 }

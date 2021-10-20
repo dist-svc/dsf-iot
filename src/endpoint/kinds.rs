@@ -7,7 +7,7 @@ use crate::alloc::prelude::v1::*;
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
     (1, Kind::Temperature, "temperature",  "°C"     ),
-    (2, Kind::Humidity,    "humidity",     "% RH"   ),
+    (2, Kind::Humidity,    "humidity",     "%RH"    ),
     (3, Kind::Pressure,    "pressure",     "kPa"    ),
     (4, Kind::Co2,         "CO2",          "ppm"    ),
     (5, Kind::State,       "state",        "bool"   ),
@@ -20,6 +20,7 @@ pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "strum", derive(strum_macros::Display))]
+#[cfg_attr(feature = "strum", strum(serialize_all="snake_case"))]
 pub enum Kind {
     /// Temperature in (degrees Celcius)
     Temperature,
@@ -68,7 +69,7 @@ impl Kind {
         let mut buff = String::new();
 
         for (i, _k, s, u) in ENDPOINT_KINDS {
-            write!(&mut buff, "{} (unit: {}, id: {}), ", s, u, i).unwrap();
+            write!(&mut buff, "'{}' (unit: {}, id: {}), ", s, u, i).unwrap();
         }
 
         write!(&mut buff, "RAW_ID (no unit)").unwrap();
@@ -88,7 +89,7 @@ impl core::str::FromStr for Kind {
     type Err = &'static str;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
-        match ENDPOINT_KINDS.iter().find(|(_i, _k, s, _u)| src == *s) {
+        match ENDPOINT_KINDS.iter().find(|(_i, _k, s, _u)| src.to_lowercase() == *s.to_lowercase()) {
             Some(e) => Ok(e.1),
             None => Err("No matching endpoint name found"),
         }

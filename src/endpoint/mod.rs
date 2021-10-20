@@ -105,8 +105,22 @@ impl Descriptor {
             len as usize,
         ))
     }
+
+    #[cfg(feature = "alloc")]
+    pub fn display(eps: &[Descriptor]) -> String {
+        let mut s = String::new();
+
+        s.push_str("Endpoints: \r\n");
+        for i in 0..eps.len() {
+            let e = &eps[i];
+            s.push_str(&format!("  - {:2}: {:16} in {:4} (metadata: {:?})\r\n", i, e.kind, e.kind.unit(), e.meta));
+        }
+
+        s
+    }
 }
 
+#[cfg(feature = "std")]
 impl dsf_core::base::Encode for Descriptor {
     type Error = Error;
 

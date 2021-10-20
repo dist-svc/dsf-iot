@@ -31,7 +31,6 @@ pub trait EndpointContainer: AsRef<ep::Descriptor> {}
 //#[cfg_attr(feature = "structopt", derive(structopt::StructOpt))]
 pub struct IotService<EPS = Vec<ep::Descriptor>, META = Vec<(String, String)>> {
     pub id: Id,
-    index: usize,
 
     pub secret_key: Option<SecretKey>,
 
@@ -75,17 +74,17 @@ where
     META: AsRef<(String, String)>,
 {
     /// Create a new IoT service instance
-    pub fn new(id: Id, index: usize, endpoints: EPS, meta: META) -> Self {
+    pub fn new(id: Id, endpoints: EPS, meta: META) -> Self {
         Self {
-            id, index, secret_key: None, endpoints, meta
+            id, secret_key: None, endpoints, meta
         }
     }
 }
 
 impl IotService {
-    pub fn decode_page(s: &ServiceInfo, mut p: Page) -> Result<IotService, IotError> {
+    pub fn decode_page(mut p: Page, secret_key: Option<&SecretKey>) -> Result<IotService, IotError> {
 
-        if let Some(sk) = s.secret_key.as_ref() {
+        if let Some(sk) = secret_key {
             p.decrypt(sk)?;
         }
 
@@ -98,8 +97,7 @@ impl IotService {
         // TODO: pass through metadata
         let s = IotService {
             id: p.id,
-            index: s.index,
-            secret_key: s.secret_key.clone(),
+            secret_key: secret_key.map(|sk| sk.clone() ),
             endpoints,
             meta: vec![],
         };
@@ -151,6 +149,7 @@ pub struct IotData {
 }
 
 impl IotData {
+    // TODO: remove this, duplicates decode_page but worse for RPC
     #[cfg(feature = "dsf-rpc")]
     pub fn decode(mut i: DataInfo, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
 

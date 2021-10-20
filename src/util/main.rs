@@ -57,7 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let (id, keys) = IotClient::generate().unwrap();
 
             println!("ID: {}", id);
-            println!("Public key: {}", keys.pub_key);
+            println!("Public key: {}", keys.pub_key.unwrap());
             println!("Private key: {}", keys.pri_key.unwrap());
             println!("Secret key: {}", keys.sec_key.unwrap());
 
@@ -65,6 +65,11 @@ async fn main() -> Result<(), anyhow::Error> {
         },
         Command::Encode(opts) => {
             IotClient::encode(opts)?;
+
+            return Ok(())
+        },
+        Command::Decode(opts) => {
+            IotClient::decode(opts)?;
 
             return Ok(())
         }
