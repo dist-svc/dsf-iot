@@ -1,151 +1,32 @@
 use core::fmt::Debug;
 use core::convert::TryFrom;
 
-use std::collections::HashMap;
-
-use log::{debug, warn, error};
+use log::{debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
 
 use crate::{IOT_APP_ID, endpoint::Descriptor};
 
+
+mod store;
+pub use store::*;
+
+mod comms;
+pub use comms::*;
+
+
 // Trying to build an abstraction over IP, LPWAN, (UNIX to daemon?)
 
 pub struct Engine<C: Comms, S: Store = MemoryStore> {
     svc: Service,
+    pri: Signature,
+    req_id: u16,
     comms: C,
     store: S,
 }
 
-pub trait Comms {
-    /// Address for directing packets
-    type Address: Debug;
 
-    // Communication error type
-    type Error: Debug;
-
-    /// Receive data if available
-    fn recv(&mut self, buff: &mut [u8]) -> Result<Option<(usize, Self::Address)>, Self::Error>;
-
-    /// Send data to the specified address
-    fn send(&mut self, to: &Self::Address, data: &[u8]) -> Result<(), Self::Error>;
-
-    /// Broadcast data
-    fn broadcast(&mut self, data: &[u8]) -> Result<(), Self::Error>;
-}
-
-pub trait Store: KeySource {
-    /// Peer address type
-    type Address: Debug + 'static;
-
-    /// Storage error type
-    type Error: Debug;
-
-    type Iter<'a>: Iterator<Item=(&'a Id, &'a Peer<Self::Address>)>;
-
-    /// Fetch keys associated with this service
-    fn get_ident(&self) -> Option<Keys> {
-        None
-    }
-
-    /// Set keys associated with this service
-    fn set_ident(&mut self, _keys: &Keys) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    fn get_last_sig(&self) -> Option<Signature> {
-        None
-    }
-
-    fn set_last_sig(&mut self, sig: &Signature) -> Result<(), Self::Error> {
-        todo!()
-    }
-
-    fn update_peer<F: Fn(&mut Peer<Self::Address>)-> ()>(&mut self, id: &Id, f: F) -> Result<(), Self::Error> {
-        unimplemented!()
-    }
-
-    fn peers<'a>(&'a self) -> Self::Iter<'a>{
-        todo!()
-    }
-}
-
-#[derive(Debug)]
-pub struct Peer<Addr: Debug> {
-    pub keys: Keys,
-    pub addr: Option<Addr>,
-    pub subscriber: bool,
-    pub subscribed: bool,
-}
-
-impl <Addr: Debug> Default for Peer<Addr> {
-    fn default() -> Self {
-        Self { 
-            keys: Keys::default(), 
-            addr: None,
-            subscriber: false,
-            subscribed: false,
-        }
-    }
-}
-
-pub struct MemoryStore<Addr: Debug = std::net::SocketAddr> {
-    our_keys: Option<Keys>,
-    peers: HashMap<Id, Peer<Addr>>,
-}
-
-impl <Addr: Debug> MemoryStore<Addr> {
-    pub fn new() -> Self {
-        Self {
-            our_keys: None,
-            peers: HashMap::new(),
-        }
-    }
-}
-
-impl <Addr: Debug + 'static> Store for MemoryStore<Addr> {
-    type Address = Addr;
-    type Error = core::convert::Infallible;
-    type Iter<'a> = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
-
-    fn get_ident(&self) -> Option<Keys> {
-        self.our_keys.clone()
-    }
-
-    fn set_ident(&mut self, keys: &Keys) -> Result<(), Self::Error> {
-        self.our_keys = Some(keys.clone());
-        Ok(())
-    }
-
-    fn update_peer<F: Fn(&mut Peer<Self::Address>)-> ()>(&mut self, id: &Id, f: F) -> Result<(), Self::Error> {
-        let p = self.peers.entry(id.clone()).or_default();
-        f(p);
-        Ok(())
-    }
-
-    fn peers<'a>(&'a self) -> Self::Iter<'a> {
-        self.peers.iter()
-    }
-}
-
-impl <'a, Addr: 'static + Debug> IntoIterator for &'a MemoryStore<Addr>{
-    type Item = (&'a Id, &'a Peer<Addr>);
-
-    type IntoIter = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.peers.iter()
-    }
-}
-
-
-impl <Addr: Debug> KeySource for MemoryStore<Addr> {
-    fn keys(&self, id: &Id) -> Option<Keys> {
-        self.peers.get(id).map(|p| p.keys.clone() )
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum EngineError<CommsError: Debug, StoreError: Debug> {
     Core(dsf_core::error::Error),
     
@@ -154,41 +35,87 @@ pub enum EngineError<CommsError: Debug, StoreError: Debug> {
     Store(StoreError),
 
     Unhandled,
+
+    Unsupported,
 }
 
 pub enum EngineEvent {
 
 }
 
+#[derive(Debug, PartialEq)]
+enum EngineResponse {
+    None,
+    Net(NetResponseKind),
+    Page(Page),
+}
 
+impl From<NetResponseKind> for EngineResponse {
+    fn from(r: NetResponseKind) -> Self {
+        Self::Net(r)
+    }
+}
+
+impl From<Page> for EngineResponse {
+    fn from(p: Page) -> Self {
+        Self::Page(p)
+    }
+}
 
 impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
 
-    pub fn new(mut sb: ServiceBuilder, comms: C, store: S) -> Result<Self, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    pub fn new(mut sb: ServiceBuilder, comms: C, mut store: S) -> Result<Self, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         // Start assembling the service
         sb = sb.application_id(IOT_APP_ID);
 
         // Attempt to load existing keys
         if let Some(k) = store.get_ident() {
+            debug!("Using existing keys: {:?}", k);
             sb = sb.keys(k);
         }
 
         // Attempt to load last sig for continuation
         // TODO: should this fetch the index too?
         if let Some(s) = store.get_last_sig() {
+            debug!("Using last sig: {}", s);
             sb = sb.last_signature(s);
         }
 
+        // TODO: fetch existing page if available?
+
         // Create service
-        let svc = sb.build().map_err(EngineError::Core)?;
+        let mut svc = sb.build().map_err(EngineError::Core)?;
+
+        // TODO: do not regenerate page if not required
+
+        // Generate initial page
+        let mut page_buff = [0u8; 512];
+        let (_n, p) = svc.publish_primary(&mut page_buff)
+            .map_err(EngineError::Core)?;
+        
+        let sig = p.signature().unwrap();
+
+        debug!("Generated new page: {:?} sig: {}", p, sig);
+
+        // Update last signature in store
+        store.set_last_sig(&sig)
+            .map_err(EngineError::Store)?;
+
+        // Store page if possible
+        store.store_page(&sig, &p)
+            .map_err(EngineError::Store)?;
+
+        // TODO: setup forward to subscribers?
 
         // Return object
-        Ok(Self{ svc, comms, store })
+        Ok(Self{ svc, pri: sig, req_id: 0, comms, store })
     }
 
     /// Publish service data
     pub fn publish(&mut self, body: &[u8], opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         
+        // TODO: Fetch last signature / associated primary page
+
         // Setup page options for encoding
         let page_opts = DataOptions {
             body: Body::Cleartext(body.to_vec()),
@@ -198,15 +125,22 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
 
         // Publish data to buffer
         let mut page_buff = [0u8; 512];
-        let (n, p) = self.svc.publish_data(page_opts, &mut page_buff[..]).map_err(EngineError::Core)?;
+        let (n, page) = self.svc.publish_data(page_opts, &mut page_buff[..]).map_err(EngineError::Core)?;
 
         let data = &page_buff[..n];
+        let sig = page.signature().unwrap();
 
-        // TODO: write to store
+        // Update last sig
+        self.store.set_last_sig(&sig)
+            .map_err(EngineError::Store)?;
+
+        // Write to store
+        self.store.store_page(&sig, &page)
+            .map_err(EngineError::Store)?;
 
         // Send updated page to subscribers
-        for (id, p) in self.store.peers() {
-            match (&p.subscriber, &p.addr) {
+        for (id, peer) in self.store.peers() {
+            match (&peer.subscriber, &peer.addr) {
                 (true, Some(addr)) => {
                     debug!("Forwarding data to: {} ({:?})", id, addr);
                     self.comms.send(addr, data).map_err(EngineError::Comms)?;
@@ -216,6 +150,24 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
         }
 
         Ok(())
+    }
+
+    /// Subscribe to the specified service, optionally using the provided address
+    pub fn subscribe(&mut self, id: Id, addr: Option<A>) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+        // TODO: for delegation peers != services, do we need to store separate objects for this?
+        todo!()
+    }
+
+    /// Update internal state
+    pub fn update(&mut self) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+
+        // TODO: regenerate primary page if required
+
+        // TODO: walk subscribers and expire if required
+
+        // TODO: walk subscriptions and re-subscribe if required
+
+        todo!()
     }
 
     /// Handle received data
@@ -232,30 +184,77 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
         };
 
         // Convert and handle messages
-        match (NetMessage::convert(base.clone(), &self.store), Page::try_from(base)) {
-            (Ok(NetMessage::Request(req)), _) => self.handle_req(from, req)?,
-            (Ok(NetMessage::Response(resp)), _) => self.handle_resp(from, resp)?,
-            (_, Ok(p)) => self.handle_page(from, p)?,
+        let resp = match (NetMessage::convert(base.clone(), &self.store), Page::try_from(base)) {
+            (Ok(NetMessage::Request(req)), _) => self.handle_req(&from, req)?,
+            (Ok(NetMessage::Response(resp)), _) => self.handle_resp(&from, resp)?,
+            (_, Ok(p)) => self.handle_page(&from, p)?,
             _ => {
                 error!("Unhandled object type");
                 return Err(EngineError::Unhandled)
             }
         };
 
-        // TODO: send responses
+        let mut buff = [0u8; 512];
 
-        todo!()
+        // Send responses
+        match resp {
+            EngineResponse::Net(net) => {
+                self.req_id = self.req_id.wrapping_add(1);
+                let r = NetResponse::new(self.svc.id(), self.req_id, net, Flags::empty());
+
+                let n = self.svc.encode_message(NetMessage::Response(r), &mut buff)
+                    .map_err(EngineError::Core)?;
+                
+                self.comms.send(&from, &buff[..n]).map_err(EngineError::Comms)?;
+            },
+            EngineResponse::Page(p) => {
+                debug!("Sending page to: {:?}", from);
+                if let Some(r) = p.raw() {
+                    self.comms.send(&from, data).map_err(EngineError::Comms)?;
+                } else {
+                    // TODO: encode page here if required (shouldn't really ever occur?)
+                    todo!()
+                }
+            },
+            EngineResponse::None => (),
+        }
+
+        Ok(())
     }
 
-    fn handle_req(&mut self, from: A, req: NetRequest) -> Result<Option<NetResponse>, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+
+
+    fn handle_req(&mut self, from: &A, req: NetRequest) -> Result<EngineResponse, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         use NetRequestKind::*;
 
-        debug!("Received request: {:?} from: {:?}", req, from);
+        debug!("Received request: {:?} from: {} ({:?})", req, req.common.from, from);
 
         // Handle request messages
-        let resp_body = match &req.data {
-            Hello | Ping => Some(NetResponseKind::Status(Status::Ok)),
-            //Discover => (),
+        let resp: EngineResponse = match &req.data {
+            Hello | Ping => NetResponseKind::Status(Status::Ok).into(),
+            Discover => {
+                debug!("Received discovery from {} ({:?})", req.common.from, from);
+
+                // TODO: check discovery filters etc.
+
+                // Respond with page if filters pass
+                if let Some(p) = self.store.fetch_page(&self.pri)
+                        .map_err(EngineError::Store)? {
+                    p.into()
+                } else {
+                    EngineResponse::None
+                }
+            },
+            Query(id) if id == &self.svc.id() => {
+                debug!("Sending service information to {} ({:?})", req.common.from, from);
+
+                if let Some(p) = self.store.fetch_page(&self.pri)
+                        .map_err(EngineError::Store)? {
+                    p.into()
+                } else {
+                    NetResponseKind::Status(Status::InvalidRequest).into()
+                }
+            },
             Subscribe(id) if id == &self.svc.id() => {
                 debug!("Adding {} ({:?}) as a subscriber", req.common.from, from);
 
@@ -264,7 +263,7 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
                     p.addr = Some(from.clone());
                 }).map_err(EngineError::Store)?;
 
-                Some(NetResponseKind::Status(Status::Ok))
+                NetResponseKind::Status(Status::Ok).into()
             },
             Unsubscribe(id) if id == &self.svc.id() => {
                 debug!("Removing {} ({:?}) as a subscriber", req.common.from, from);
@@ -273,32 +272,66 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
                     p.subscriber = false;
                 }).map_err(EngineError::Store)?;
 
-                Some(NetResponseKind::Status(Status::Ok))
+                NetResponseKind::Status(Status::Ok).into()
             },
             Subscribe(_id) | Unsubscribe(_id) => {
-                Some(NetResponseKind::Status(Status::InvalidRequest))
+                NetResponseKind::Status(Status::InvalidRequest).into()
             },
-            //PushData(_, _) => (),
-            _ => Some(NetResponseKind::Status(Status::InvalidRequest)),
+            //PushData(id, pages) => ()
+            _ => NetResponseKind::Status(Status::InvalidRequest).into()
         };
 
-        if let Some(b) = resp_body {
-            Ok(Some(NetResponse::new(self.svc.id(), req.id, b, Flags::empty())))
-        } else {
-            Ok(None)
-        }
+        Ok(resp)
     }
 
-    fn handle_resp(&mut self, from: <C as Comms>::Address, resp: NetResponse) -> Result<Option<NetResponse>, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
-        use NetResponseKind::*;
+    fn handle_resp(&mut self, from: &A, resp: NetResponse) -> Result<EngineResponse, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+        //use NetResponseKind::*;
 
         debug!("Received response: {:?} from: {:?}", resp, from);
 
+        let req_id = resp.common.id;
+
+        // Find matching peer for response
+        let peer = match self.store.get_peer(&resp.common.from).map_err(EngineError::Store)? {
+            Some(p) => p,
+            None => {
+                panic!();
+            },
+        };
+
         // Handle response messages
-        match &resp.data {
-            Status(_) => (),
-            NoResult => (),
-            PullData(_, _) => (),
+        match (&peer.subscribed, &resp.data) {
+            // Subscribe responses
+            (SubscribeState::Subscribing(id), NetResponseKind::Status(st)) if req_id == *id => {
+                if *st == Status::Ok {
+                    info!("Subscribe ok for {} ({:?})", resp.common.from, from);
+
+                    self.store.update_peer(&resp.common.from, |p| {
+                        p.subscribed = SubscribeState::Subscribed;
+                    }).map_err(EngineError::Store)?
+
+                } else {
+                    info!("Subscribe failed for {} ({:?})", resp.common.from, from);
+
+                }
+            },
+            // Unsubscribe response
+            (SubscribeState::Unsubscribing(id), NetResponseKind::Status(st)) if req_id == *id => {
+                if *st == Status::Ok {
+                    info!("Unsubscribe ok for {} ({:?})", resp.common.from, from);
+
+                    self.store.update_peer(&resp.common.from, |p| {
+                        p.subscribed = SubscribeState::None;
+                    }).map_err(EngineError::Store)?
+
+                } else {
+                    info!("Unsubscribe failed for {} ({:?})", resp.common.from, from);
+
+                }
+            },
+            // TODO: what other responses are important?
+            //NoResult => (),
+            //PullData(_, _) => (),
             _ => todo!(),
         };
 
@@ -306,64 +339,27 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
         todo!()
     }
 
-    fn handle_page(&mut self, from: <C as Comms>::Address, p: Page) -> Result<Option<NetResponse>, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    fn handle_page(&mut self, from: &A, p: Page) -> Result<EngineResponse, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         debug!("Received page: {:?} from: {:?}", p, from);
 
+        // Find matching peer for rx'd page
+        let peer = match self.store.get_peer(p.id()).map_err(EngineError::Store)? {
+            Some(p) => p,
+            None => {
+                error!("no peer for id: {}", p.id());
+                return Ok(NetResponseKind::Status(Status::InvalidRequest).into());
+            },
+        };
+
+        // Check for subscription
+        if !peer.subscribed() {
+            warn!("Not subscribed to peer: {}", p.id());
+            return Ok(NetResponseKind::Status(Status::InvalidRequest).into());
+        }
+
+        // TODO: forward pages / emit event / idk
+
         todo!()
-    }
-}
-
-#[cfg(feature="std")]
-impl <S: Store<Address=std::net::SocketAddr>> Engine<std::net::UdpSocket, S> {
-    /// Create a new UDP engine instance
-    pub fn udp<A: std::net::ToSocketAddrs>(sb: ServiceBuilder, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
-        // Attempt to bind UDP socket
-        let comms = std::net::UdpSocket::bind(addr).map_err(EngineError::Comms)?;
-
-        // Enable broadcast and nonblocking polling
-        comms.set_broadcast(true).map_err(EngineError::Comms)?;
-        comms.set_nonblocking(true).map_err(EngineError::Comms)?;
-
-        // Create engine instance
-        Self::new(sb, comms, store)
-    }
-
-    // Tick function to update engine
-    pub fn tick(&mut self) -> Result<(), EngineError<std::io::Error, <S as Store>::Error>> {
-        let mut buff = [0u8; 512];
-
-        // Check for and handle received messages
-        if let Some((n, a)) = Comms::recv(&mut self.comms, &mut buff).map_err(EngineError::Comms)? {
-            self.handle(a, &buff[..n])?;
-        }
-
-        // TODO: anything else?
-
-        Ok(())
-    }
-}
-
-#[cfg(feature="std")]
-impl Comms for std::net::UdpSocket {
-    type Address = std::net::SocketAddr;
-
-    type Error = std::io::Error;
-
-    fn recv(&mut self, buff: &mut [u8]) -> Result<Option<(usize, Self::Address)>, Self::Error> {
-        match self.recv_from(buff) {
-            Ok(v) => Ok(Some(v)),
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-
-    fn send(&mut self, to: &Self::Address, data: &[u8]) -> Result<(), Self::Error> {
-        self.send_to(data, to)?;
-        Ok(())
-    }
-
-    fn broadcast(&mut self, _data: &[u8]) -> Result<(), Self::Error> {
-        todo!("Work out how to derive broadcast address")
     }
 }
 
@@ -380,34 +376,7 @@ mod test {
 
     use super::*;
 
-    struct MockComms {
-        tx: Vec<(u8, Vec<u8>)>,
-    }
-
-    impl Default for MockComms {
-        fn default() -> Self {
-            Self { tx: vec![] }
-        }
-    }
-
-    impl Comms for MockComms {
-        type Address = u8;
-
-        type Error = Infallible;
-
-        fn recv(&mut self, buff: &mut [u8]) -> Result<Option<(usize, Self::Address)>, Self::Error> {
-            todo!()
-        }
-
-        fn send(&mut self, to: &Self::Address, data: &[u8]) -> Result<(), Self::Error> {
-            self.tx.push((*to, data.to_vec()));
-            Ok(())
-        }
-
-        fn broadcast(&mut self, data: &[u8]) -> Result<(), Self::Error> {
-            todo!()
-        }
-    }
+    use super::comms::MockComms;
 
     // Setup an engine instance for testing
     fn setup() -> (Service, Engine<MockComms, MemoryStore<u8>>) {
@@ -448,13 +417,12 @@ mod test {
             let req = NetRequest::new(p.id(), 1, t.0.clone(), Flags::empty());
 
             // Pass to engine
-            let resp = e.handle_req(from, req.clone())
+            let resp = e.handle_req(&from, req.clone())
                 .expect("Failed to handle message");
 
             // Check response
-            let ex = NetResponse::new(e.svc.id(), 1, t.1.clone(), Flags::empty());
-            assert_eq!(resp.as_ref(), Some(&ex),
-                "\nRequest: {:#?}\nExpected: {:#?}\nActual: {:#?}", req, ex, resp);
+            assert_eq!(resp, t.1.clone().into(),
+                "Unexpected response for request: {:#?}", req);
         }
     }
 
@@ -465,11 +433,10 @@ mod test {
 
         // Build subscribe request and execute
         let req = NetRequest::new(p.id(), 1, NetRequestKind::Subscribe(e.svc.id()), Flags::empty());
-        let resp = e.handle_req(from, req).expect("Failed to handle message");
+        let resp = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
-        let ex = NetResponse::new(e.svc.id(), 1, NetResponseKind::Status(Status::Ok), Flags::empty());
-        assert_eq!(resp, Some(ex));
+        assert_eq!(resp, NetResponseKind::Status(Status::Ok).into());
 
         // Check subscriber state
         assert_eq!(e.store.peers.get(&p.id()).map(|p| p.subscriber ), Some(true));
@@ -486,11 +453,11 @@ mod test {
 
         // Build subscribe request and execute
         let req = NetRequest::new(p.id(), 1, NetRequestKind::Unsubscribe(e.svc.id()), Flags::empty());
-        let resp = e.handle_req(from, req).expect("Failed to handle message");
+        let resp = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
         let ex = NetResponse::new(e.svc.id(), 1, NetResponseKind::Status(Status::Ok), Flags::empty());
-        assert_eq!(resp, Some(ex));
+        assert_eq!(resp, NetResponseKind::Status(Status::Ok).into());
 
         // Check subscriber state
         assert_eq!(e.store.peers.get(&p.id()).map(|p| p.subscriber ), Some(false));
@@ -526,9 +493,10 @@ mod test {
         let d = e.comms.tx.pop().unwrap();
         assert_eq!(d.0, from);
 
+        // Parse out page
         let (b, _n) = Base::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
 
-        // TODO: translate back to IoT data
+        // TODO: translate back to IoT data and check
 
     }
 }

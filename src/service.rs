@@ -2,7 +2,7 @@ use core::convert::TryFrom;
 use std::marker::PhantomData;
 
 #[cfg(feature = "alloc")]
-use alloc::prelude::v1::*;
+use alloc::vec::Vec;
 
 #[cfg(feature = "alloc")]
 use alloc::vec;
