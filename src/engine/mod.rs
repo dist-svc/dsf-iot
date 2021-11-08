@@ -17,14 +17,15 @@ pub use comms::*;
 
 // Trying to build an abstraction over IP, LPWAN, (UNIX to daemon?)
 
-pub struct Engine<C: Comms, S: Store = MemoryStore> {
+pub struct Engine<'a, C: Comms,  S: Store = MemoryStore, const N: usize = 512> {
     svc: Service,
     pri: Signature,
     req_id: u16,
     comms: C,
     store: S,
-}
 
+    on_rx: Option<&'a mut dyn FnMut(&Page)>,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum EngineError<CommsError: Debug, StoreError: Debug> {
@@ -62,7 +63,7 @@ impl From<Page> for EngineResponse {
     }
 }
 
-impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
+impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: usize> Engine<'a, C, S, N> {
 
     pub fn new(mut sb: ServiceBuilder, comms: C, mut store: S) -> Result<Self, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         // Start assembling the service
@@ -89,7 +90,7 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
         // TODO: do not regenerate page if not required
 
         // Generate initial page
-        let mut page_buff = [0u8; 512];
+        let mut page_buff = [0u8; N];
         let (_n, p) = svc.publish_primary(&mut page_buff)
             .map_err(EngineError::Core)?;
         
@@ -108,7 +109,11 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
         // TODO: setup forward to subscribers?
 
         // Return object
-        Ok(Self{ svc, pri: sig, req_id: 0, comms, store })
+        Ok(Self{ svc, pri: sig, req_id: 0, comms, store, on_rx: None })
+    }
+
+    pub fn set_handler(&mut self, on_rx: &'a mut dyn FnMut(&Page)) {
+        self.on_rx = Some(on_rx);
     }
 
     /// Publish service data
@@ -124,7 +129,7 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
         };
 
         // Publish data to buffer
-        let mut page_buff = [0u8; 512];
+        let mut page_buff = [0u8; N];
         let (n, page) = self.svc.publish_data(page_opts, &mut page_buff[..]).map_err(EngineError::Core)?;
 
         let data = &page_buff[..n];
@@ -153,9 +158,34 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
     }
 
     /// Subscribe to the specified service, optionally using the provided address
-    pub fn subscribe(&mut self, id: Id, addr: Option<A>) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    pub fn subscribe(&mut self, id: Id, addr: A) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         // TODO: for delegation peers != services, do we need to store separate objects for this?
-        todo!()
+
+        debug!("Attempting to subscribe to: {} at: {:?}", id, addr);
+
+        // Generate request ID and update peer
+        self.req_id = self.req_id.wrapping_add(1);
+        let req_id = self.req_id;
+
+        // Update subscription
+        self.store.update_peer(&id, |p| {
+            // TODO: include who this is via
+            p.subscribed = SubscribeState::Subscribing(req_id);
+        }).map_err(EngineError::Store)?;
+
+        // Send subscribe request
+        let mut buff = [0u8; N];
+
+        // TODO: how to separate target -service- from target -peer-
+        let req = NetRequest::new(self.svc.id(), req_id, NetRequestKind::Subscribe(id), Flags::empty());
+        let n = self.svc.encode_message(NetMessage::Request(req), &mut buff)
+                .map_err(EngineError::Core)?;
+
+        self.comms.send(&addr, &buff[..n]).map_err(EngineError::Comms)?;
+
+        debug!("Subscribe TX done (req_id: {})", req_id);
+
+        Ok(())
     }
 
     /// Update internal state
@@ -194,7 +224,7 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
             }
         };
 
-        let mut buff = [0u8; 512];
+        let mut buff = [0u8; N];
 
         // Send responses
         match resp {
@@ -336,7 +366,7 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
         };
 
 
-        todo!()
+        Ok(EngineResponse::None)
     }
 
     fn handle_page(&mut self, from: &A, p: Page) -> Result<EngineResponse, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
@@ -357,9 +387,13 @@ impl <A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>> Engine<C, S> {
             return Ok(NetResponseKind::Status(Status::InvalidRequest).into());
         }
 
-        // TODO: forward pages / emit event / idk
+        // Call receive handler
+        if let Some(on_rx) = self.on_rx.as_mut() {
+            (on_rx)(&p);
+        }
 
-        todo!()
+        // Respond with OK
+        Ok(NetResponseKind::Status(Status::Ok).into())
     }
 }
 
@@ -379,7 +413,7 @@ mod test {
     use super::comms::MockComms;
 
     // Setup an engine instance for testing
-    fn setup() -> (Service, Engine<MockComms, MemoryStore<u8>>) {
+    fn setup<'a>() -> (Service, Engine<'a, MockComms, MemoryStore<u8>>) {
         // Setup debug logging
         let _ = simplelog::SimpleLogger::init(simplelog::LevelFilter::Debug, simplelog::Config::default());
 
@@ -498,5 +532,57 @@ mod test {
 
         // TODO: translate back to IoT data and check
 
+    }
+
+    #[test]
+    fn test_subscribe() {
+        let (mut p, mut e) = setup();
+        let from = 1;
+
+        // Setup peer as subscriber
+        e.store.update_peer(&p.id(), |p| {
+            p.addr = Some(from);
+        }).unwrap();
+
+        // Call publish operation
+        e.subscribe(p.id(), from)
+            .expect("Subscribing error");
+
+        // Check peer state
+        assert_eq!(e.store.peers.get(&p.id()).map(|p| p.subscribed ), Some(SubscribeState::Subscribing(e.req_id)));
+
+        // Check outgoing data
+        let d = e.comms.tx.pop().expect("No outgoing data found");
+        assert_eq!(d.0, from, "outgoing address mismatch");
+
+
+        // Parse out page and convert back to message
+        let (b, _n) = Base::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
+        let m = NetMessage::convert(b, &e.store).expect("Failed to convert message");
+
+        let expected = NetRequest::new(e.svc.id(), e.req_id, 
+                NetRequestKind::Subscribe(p.id()), Flags::empty());
+
+        assert_eq!( m, NetMessage::Request(expected), "Request mismatch");
+
+
+        // Respond with subscribe ok
+        let mut buff = [0u8; 512];
+        let (_n, sp) = p.publish_primary(&mut buff).unwrap();
+
+        let resp = NetResponse::new(p.id(), e.req_id, NetResponseKind::Status(Status::Ok), Flags::empty());
+        e.handle_resp(&from, resp).expect("Response handling failed");
+
+        // Check peer state is now subscribed
+        assert_eq!(e.store.peers.get(&p.id()).map(|p| p.subscribed ), Some(SubscribeState::Subscribed));
+
+
+        // Test receiving data
+        let mut new_page = None;
+        let mut h = |page: &Page| new_page = Some(page.clone()) ;
+        e.set_handler(&mut h);
+
+        e.handle_page(&from, sp.clone()).expect("Failed to handle page");
+        assert_eq!(Some(sp), new_page);
     }
 }

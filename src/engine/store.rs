@@ -27,7 +27,7 @@ pub trait Store: KeySource {
     /// Peer iterator type, for collecting subscribers etc.
     type Iter<'a>: Iterator<Item=(&'a Id, &'a Peer<Self::Address>)>;
 
-    
+
     /// Fetch keys associated with this service
     fn get_ident(&self) -> Option<Keys>;
 
@@ -35,20 +35,27 @@ pub trait Store: KeySource {
     fn set_ident(&mut self, keys: &Keys) -> Result<(), Self::Error>;
 
 
+    /// Fetch last signature
     fn get_last_sig(&self) -> Option<Signature>;
 
+    /// Update last signature
     fn set_last_sig(&mut self, sig: &Signature) -> Result<(), Self::Error>;
 
-
+    
+    // Fetch peer information
     fn get_peer(&self, id: &Id) -> Result<Option<Peer<Self::Address>>, Self::Error>;
 
+    // Update a specified peer
     fn update_peer<F: Fn(&mut Peer<Self::Address>)-> ()>(&mut self, id: &Id, f: F) -> Result<(), Self::Error>;
 
+    // Iterate through known peers
     fn peers<'a>(&'a self) -> Self::Iter<'a>;
 
 
+    // Store a page
     fn store_page(&mut self, sig: &Signature, p: &Page) -> Result<(), Self::Error>;
 
+    // Fetch a stored page
     fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Page>, Self::Error>;
 }
 
@@ -71,7 +78,7 @@ impl <Addr: Clone + Debug> Default for Peer<Addr> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum SubscribeState {
     None,
     Subscribing(RequestId),

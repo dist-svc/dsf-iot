@@ -26,7 +26,7 @@ pub trait Comms {
 
 
 #[cfg(feature="std")]
-impl <S: Store<Address=std::net::SocketAddr>> Engine<std::net::UdpSocket, S> {
+impl <S: Store<Address=std::net::SocketAddr>> Engine<'_, std::net::UdpSocket, S> {
     /// Create a new UDP engine instance
     pub fn udp<A: std::net::ToSocketAddrs>(sb: ServiceBuilder, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
         // Attempt to bind UDP socket
