@@ -129,8 +129,7 @@ impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: u
         };
 
         // Publish data to buffer
-        let mut page_buff = [0u8; N];
-        let (n, page) = self.svc.publish_data(page_opts, &mut page_buff[..]).map_err(EngineError::Core)?;
+        let (n, page_buff, page) = self.svc.publish_data_buff::<512>(page_opts).map_err(EngineError::Core)?;
 
         let data = &page_buff[..n];
         let sig = page.signature().unwrap();
@@ -174,11 +173,9 @@ impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: u
         }).map_err(EngineError::Store)?;
 
         // Send subscribe request
-        let mut buff = [0u8; N];
-
         // TODO: how to separate target -service- from target -peer-
         let req = NetRequest::new(self.svc.id(), req_id, NetRequestKind::Subscribe(id), Flags::empty());
-        let n = self.svc.encode_message(NetMessage::Request(req), &mut buff)
+        let (n, buff) = self.svc.encode_message_buff::<_, 512>(req)
                 .map_err(EngineError::Core)?;
 
         self.comms.send(&addr, &buff[..n]).map_err(EngineError::Comms)?;
@@ -224,15 +221,13 @@ impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: u
             }
         };
 
-        let mut buff = [0u8; N];
-
         // Send responses
         match resp {
             EngineResponse::Net(net) => {
                 self.req_id = self.req_id.wrapping_add(1);
                 let r = NetResponse::new(self.svc.id(), self.req_id, net, Flags::empty());
 
-                let n = self.svc.encode_message(NetMessage::Response(r), &mut buff)
+                let (n, buff) = self.svc.encode_message_buff::<_, 512>(NetMessage::Response(r))
                     .map_err(EngineError::Core)?;
                 
                 self.comms.send(&from, &buff[..n]).map_err(EngineError::Comms)?;
