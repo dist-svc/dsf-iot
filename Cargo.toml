@@ -72,9 +72,13 @@ path = "src/util/main.rs"
 required-features = ["util"]
 
 [[example]]
-name = "bme280"
+name = "bme280-client"
 required-features = ["util"]
 
+
+[[example]]
+name = "bme280-engine"
+required-features = ["util"]
 
 [patch.crates-io]
 dsf-core = { path = "../dsf-workspace/dsf-core" }

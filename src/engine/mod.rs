@@ -4,6 +4,7 @@ use core::convert::TryFrom;
 use log::{debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
+use dsf_core::base::{Parse, Encode};
 
 use crate::{IOT_APP_ID};
 use crate::endpoint::{Descriptor};
@@ -66,7 +67,43 @@ impl From<Page> for EngineResponse {
     }
 }
 
-impl <'a, A: Clone + Debug, C: Comms<Address=A>, D: AsRef<[Descriptor]>, S: Store<Address=A>, const N: usize> Engine<'a, C, D, S, N> {
+pub trait EngineBody: Filter<Self::Body> + Parse<Output=Self::Body> + Encode {
+    type Body;
+}
+
+pub trait Filter<V> {
+    fn matches(&self, v: V) -> bool;
+}
+
+impl <V: PartialEq> Filter<V> for V {
+    fn matches(&self, v: V) -> bool {
+        self == &v
+    }
+}
+
+impl <V: PartialEq> Filter<V> for &[V] {
+    fn matches(&self, v: V) -> bool {
+        self.contains(&v)
+    }
+}
+
+impl EngineBody for Vec<u8> {
+    type Body = Vec<u8>;
+}
+
+pub struct ServiceOptions<B: EngineBody = Vec<u8>, P: AsRef<[Options]> = Vec<Options>, O: AsRef<[Options]> = Vec<Options>> {
+    pub body: B,
+    pub public_options: P,
+    pub private_options: O,
+}
+
+impl <'a, A, C, D, S, const N: usize> Engine<'a, C, D, S, N> 
+where
+    A: Clone + Debug, 
+    C: Comms<Address=A>, 
+    D: AsRef<[Descriptor]>, 
+    S: Store<Address=A>,
+{
 
     pub fn new(descriptors: D, comms: C, mut store: S) -> Result<Self, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         let mut sb = ServiceBuilder::generic();
@@ -117,8 +154,17 @@ impl <'a, A: Clone + Debug, C: Comms<Address=A>, D: AsRef<[Descriptor]>, S: Stor
         Ok(Self{ descriptors, svc, pri: sig, req_id: 0, comms, store, on_rx: None })
     }
 
+    pub fn id(&self) -> Id {
+        self.svc.id()
+    }
+
     pub fn set_handler(&mut self, on_rx: &'a mut dyn FnMut(&Page)) {
         self.on_rx = Some(on_rx);
+    }
+
+    /// Discover local services
+    pub fn discover(&mut self, body: &[u8], opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+        todo!()
     }
 
     /// Publish service data
