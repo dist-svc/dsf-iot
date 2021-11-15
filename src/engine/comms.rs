@@ -3,6 +3,8 @@ use core::fmt::Debug;
 
 use dsf_core::service::ServiceBuilder;
 
+use crate::prelude::Descriptor;
+
 use super::{Engine, Store, EngineError};
 
 
@@ -26,9 +28,9 @@ pub trait Comms {
 
 
 #[cfg(feature="std")]
-impl <S: Store<Address=std::net::SocketAddr>> Engine<'_, std::net::UdpSocket, S> {
+impl <S: Store<Address=std::net::SocketAddr>, D: AsRef<[Descriptor]>> Engine<'_, std::net::UdpSocket, D, S> {
     /// Create a new UDP engine instance
-    pub fn udp<A: std::net::ToSocketAddrs>(sb: ServiceBuilder, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
+    pub fn udp<A: std::net::ToSocketAddrs>(descriptors: D, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
         // Attempt to bind UDP socket
         let comms = std::net::UdpSocket::bind(addr).map_err(EngineError::Comms)?;
 
@@ -37,7 +39,7 @@ impl <S: Store<Address=std::net::SocketAddr>> Engine<'_, std::net::UdpSocket, S>
         comms.set_nonblocking(true).map_err(EngineError::Comms)?;
 
         // Create engine instance
-        Self::new(sb, comms, store)
+        Self::new(descriptors, comms, store)
     }
 
     // Tick function to update engine

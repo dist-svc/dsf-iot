@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use alloc::vec;
 
 use dsf_core::base::{Body, Parse, Encode};
+use dsf_core::options::Metadata;
 use dsf_core::page::Page;
 use dsf_core::types::*;
 
@@ -199,7 +200,7 @@ impl IotData {
         Ok(s)
     }
 
-    pub fn encode_data(data: &[ep::Data], buff: &mut [u8]) -> Result<usize, IotError> {
+    pub fn encode_data<M: AsRef<[Metadata]>>(data: &[ep::Data<M>], buff: &mut [u8]) -> Result<usize, IotError> {
         let mut index = 0;
 
         // Encode each endpoint entry

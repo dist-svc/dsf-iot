@@ -1,5 +1,6 @@
 use core::convert::{TryFrom, TryInto};
 
+use dsf_core::options::Metadata;
 use futures::prelude::*;
 use log::{debug, info, warn};
 
@@ -302,7 +303,7 @@ impl IotClient {
 
         if let MaybeEncrypted::Cleartext(b) = p[0].body() {
             let eps = IotService::decode_body(b)?;
-            println!("{}", Descriptor::display(&eps));
+            println!("{}", Descriptor::<Vec<Metadata>>::display(&eps));
 
         } else {
             warn!("Encrypted or missing body, unable to parse endpoints");

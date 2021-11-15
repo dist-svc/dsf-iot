@@ -7,6 +7,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 
 use dsf_core::error::Error;
 use dsf_core::options::Metadata;
+use dsf_core::base::{Parse as _, Encode as _};
 
 pub mod kinds;
 pub use kinds::*;
@@ -46,7 +47,7 @@ bitflags::bitflags! {
 /// An endpoint descriptor defines the kind of an endpoint
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Descriptor {
+pub struct Descriptor<M: AsRef<[Metadata]> = Vec<Metadata>> {
     /// Endpoint Kind
     pub kind: Kind,
 
@@ -54,56 +55,17 @@ pub struct Descriptor {
     pub flags: Flags,
 
     /// Endpoint metadata
-    pub meta: Vec<Metadata>,
+    pub meta: M,
 }
 
-/// Endpoint data object contains data associated with a specific endpoint
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Data {
-    // Measurement value
-    pub value: Value,
 
-    /// Measurement metadata
-    pub meta: Vec<Metadata>,
-}
-
-impl Descriptor {
-    pub fn new(kind: Kind, flags: Flags, meta: &[Metadata]) -> Self {
+impl <M: AsRef<[Metadata]>> Descriptor<M> {
+    pub fn new(kind: Kind, flags: Flags, meta: M) -> Self {
         Self {
             kind,
             flags,
-            meta: meta.to_vec(),
+            meta: meta,
         }
-    }
-
-    pub fn parse(data: &[u8]) -> Result<(Self, usize), Error> {
-        trace!("Parsing: {:x?}", data);
-
-        // Read option header (kind and length)
-        let option_kind = NetworkEndian::read_u16(data);
-
-        if option_kind != iot_option_kinds::ENDPOINT_DESCRIPTOR {
-            warn!("Unrecognised option kind: {}", option_kind);
-            return Err(Error::InvalidOption);
-        }
-        let len = NetworkEndian::read_u16(&data[2..]) + 4;
-
-        // Parse out endpoint index and kind
-        let kind = NetworkEndian::read_u16(&data[4..]).into();
-        let flags = NetworkEndian::read_u16(&data[6..]);
-        let flags = Flags::from_bits_truncate(flags);
-
-        // TODO: read metadata
-
-        Ok((
-            Self {
-                kind,
-                flags,
-                meta: Vec::new(),
-            },
-            len as usize,
-        ))
     }
 
     #[cfg(feature = "alloc")]
@@ -120,8 +82,19 @@ impl Descriptor {
     }
 }
 
-#[cfg(feature = "std")]
-impl dsf_core::base::Encode for Descriptor {
+impl <M: AsRef<[Metadata]>> From<(Kind, Flags, M)> for Descriptor<M> {
+    fn from(v: (Kind, Flags, M)) -> Self {
+        Self::new(v.0, v.1, v.2)
+    }
+}
+
+impl <M: AsRef<[Metadata]> + Default> From<(Kind, Flags)> for Descriptor<M> {
+    fn from(v: (Kind, Flags)) -> Self {
+        Self::new(v.0, v.1, M::default())
+    }
+}
+
+impl <M: AsRef<[Metadata]>> dsf_core::base::Encode for Descriptor<M> {
     type Error = Error;
 
     fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
@@ -142,36 +115,87 @@ impl dsf_core::base::Encode for Descriptor {
     }
 }
 
+impl dsf_core::base::Parse for Descriptor {
+    type Error = Error;
+    type Output = Descriptor;
+
+    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
+        trace!("Parsing: {:x?}", buff);
+
+        // Read option header (kind and length)
+        let option_kind = NetworkEndian::read_u16(buff);
+
+        if option_kind != iot_option_kinds::ENDPOINT_DESCRIPTOR {
+            warn!("Unrecognised option kind: {}", option_kind);
+            return Err(Error::InvalidOption);
+        }
+        let len = NetworkEndian::read_u16(&buff[2..]) + 4;
+
+        // Parse out endpoint index and kind
+        let kind = NetworkEndian::read_u16(&buff[4..]).into();
+        let flags = NetworkEndian::read_u16(&buff[6..]);
+        let flags = Flags::from_bits_truncate(flags);
+
+        // TODO: read metadata
+
+        Ok((
+            Self {
+                kind,
+                flags,
+                meta: Vec::new(),
+            },
+            len as usize,
+        ))
+    }
+}
+
 #[cfg(feature = "std")]
 pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, String> {
     let kind = parse_endpoint_kind(src)?;
-    Ok(Descriptor::new(kind, Flags::empty(), &[]))
+    Ok(Descriptor::new(kind, Flags::empty(), vec![]))
 }
 
-impl Data {
-    pub fn new(value: Value, meta: &[Metadata]) -> Self {
+
+/// Endpoint data object contains data associated with a specific endpoint
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+pub struct Data<M: AsRef<[Metadata]> = Vec<Metadata>> {
+    // Measurement value
+    pub value: Value,
+
+    /// Measurement metadata
+    pub meta: M,
+}
+
+impl <M: AsRef<[Metadata]>> Data<M> {
+    pub fn new(value: Value, meta: M) -> Self {
         Self {
             value,
-            meta: meta.to_vec(),
+            meta,
         }
     }
+}
 
-    pub fn parse(data: &[u8]) -> Result<(Self, usize), Error> {
+impl dsf_core::base::Parse for Data {
+    type Error = Error;
+    type Output = Data;
+
+    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         use iot_option_kinds::*;
 
         // Read option header (kind and length)
-        let kind = NetworkEndian::read_u16(&data[0..]);
-        let len = NetworkEndian::read_u16(&data[2..]);
+        let kind = NetworkEndian::read_u16(&buff[0..]);
+        let len = NetworkEndian::read_u16(&buff[2..]);
 
         let value = match kind {
             VALUE_BOOL_FALSE => Value::Bool(false),
             VALUE_BOOL_TRUE => Value::Bool(true),
             VALUE_FLOAT => {
-                let f = NetworkEndian::read_f32(&data[4..]);
+                let f = NetworkEndian::read_f32(&buff[4..]);
                 Value::Float32(f)
             }
             VALUE_STRING => {
-                let s = core::str::from_utf8(&data[4..]).unwrap();
+                let s = core::str::from_utf8(&buff[4..]).unwrap();
                 Value::Text(s.to_owned())
             }
             _ => {
@@ -190,34 +214,39 @@ impl Data {
             len as usize + 4,
         ))
     }
+}
 
-    pub fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
+
+impl <M: AsRef<[Metadata]>> dsf_core::base::Encode for Data<M> {
+    type Error = Error;
+
+    fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
         use iot_option_kinds::*;
 
         // Write option header and data
         let len = match &self.value {
             Value::Bool(v) if *v == true => {
-                NetworkEndian::write_u16(&mut data[0..], VALUE_BOOL_TRUE);
-                NetworkEndian::write_u16(&mut data[2..], 0);
+                NetworkEndian::write_u16(&mut buff[0..], VALUE_BOOL_TRUE);
+                NetworkEndian::write_u16(&mut buff[2..], 0);
                 4
             }
             Value::Bool(v) if *v == false => {
-                NetworkEndian::write_u16(&mut data[0..], VALUE_BOOL_FALSE);
-                NetworkEndian::write_u16(&mut data[2..], 0);
+                NetworkEndian::write_u16(&mut buff[0..], VALUE_BOOL_FALSE);
+                NetworkEndian::write_u16(&mut buff[2..], 0);
                 4
             }
             Value::Float32(v) => {
-                NetworkEndian::write_u16(&mut data[0..], VALUE_FLOAT);
-                NetworkEndian::write_u16(&mut data[2..], 4);
-                NetworkEndian::write_f32(&mut data[4..], *v);
+                NetworkEndian::write_u16(&mut buff[0..], VALUE_FLOAT);
+                NetworkEndian::write_u16(&mut buff[2..], 4);
+                NetworkEndian::write_f32(&mut buff[4..], *v);
                 8
             }
             Value::Text(v) => {
                 let b = v.as_bytes();
 
-                NetworkEndian::write_u16(&mut data[0..], VALUE_STRING);
-                NetworkEndian::write_u16(&mut data[2..], b.len() as u16);
-                (&mut data[4..4 + b.len()]).copy_from_slice(b);
+                NetworkEndian::write_u16(&mut buff[0..], VALUE_STRING);
+                NetworkEndian::write_u16(&mut buff[2..], b.len() as u16);
+                (&mut buff[4..4 + b.len()]).copy_from_slice(b);
                 4 + b.len()
             }
             _ => unimplemented!(),
@@ -227,11 +256,13 @@ impl Data {
 
         Ok(len)
     }
+    
 }
+
 
 pub fn parse_endpoint_data(src: &str) -> Result<Data, String> {
     let value = parse_endpoint_value(src)?;
-    Ok(Data::new(value, &[]))
+    Ok(Data::new(value, vec![]))
 }
 
 #[cfg(test)]

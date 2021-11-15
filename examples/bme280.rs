@@ -11,6 +11,7 @@ use tracing::{debug, info, error};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
+use dsf_core::options::Metadata;
 use dsf_iot::prelude::*;
 
 #[derive(Debug, StructOpt)]
@@ -69,9 +70,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let s = c
                 .create(CreateOptions {
                     endpoints: vec![
-                        Descriptor::new(Kind::Temperature, Flags::R, &[]),
-                        Descriptor::new(Kind::Pressure, Flags::R, &[]),
-                        Descriptor::new(Kind::Humidity, Flags::R, &[]),
+                        (Kind::Temperature, Flags::R, vec![]).into(),
+                        (Kind::Pressure, Flags::R, vec![]).into(),
+                        (Kind::Humidity, Flags::R, vec![]).into(),
                     ],
                     ..Default::default()
                 })
@@ -102,9 +103,9 @@ async fn main() -> Result<(), anyhow::Error> {
         let m = bme280.measure().unwrap();
 
         let data = vec![
-            Data::new(m.temperature.into(), &[]),
-            Data::new((m.pressure / 1000.0).into(), &[]),
-            Data::new(m.humidity.into(), &[]),
+            Data::new(m.temperature.into(), vec![]),
+            Data::new((m.pressure / 1000.0).into(), vec![]),
+            Data::new(m.humidity.into(), vec![]),
         ];
 
         println!("Measurement: {:?}", data);

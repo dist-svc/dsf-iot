@@ -5,8 +5,8 @@ use log::{debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
 
-use crate::{IOT_APP_ID, endpoint::Descriptor};
-
+use crate::{IOT_APP_ID};
+use crate::endpoint::{Descriptor};
 
 mod store;
 pub use store::*;
@@ -17,10 +17,13 @@ pub use comms::*;
 
 // Trying to build an abstraction over IP, LPWAN, (UNIX to daemon?)
 
-pub struct Engine<'a, C: Comms,  S: Store = MemoryStore, const N: usize = 512> {
+pub struct Engine<'a, C: Comms, D: AsRef<[Descriptor]> = Vec<Descriptor>, S: Store = MemoryStore, const N: usize = 512> {
+    descriptors: D,
     svc: Service,
+
     pri: Signature,
     req_id: u16,
+
     comms: C,
     store: S,
 
@@ -63,9 +66,11 @@ impl From<Page> for EngineResponse {
     }
 }
 
-impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: usize> Engine<'a, C, S, N> {
+impl <'a, A: Clone + Debug, C: Comms<Address=A>, D: AsRef<[Descriptor]>, S: Store<Address=A>, const N: usize> Engine<'a, C, D, S, N> {
 
-    pub fn new(mut sb: ServiceBuilder, comms: C, mut store: S) -> Result<Self, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    pub fn new(descriptors: D, comms: C, mut store: S) -> Result<Self, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+        let mut sb = ServiceBuilder::generic();
+
         // Start assembling the service
         sb = sb.application_id(IOT_APP_ID);
 
@@ -109,7 +114,7 @@ impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: u
         // TODO: setup forward to subscribers?
 
         // Return object
-        Ok(Self{ svc, pri: sig, req_id: 0, comms, store, on_rx: None })
+        Ok(Self{ descriptors, svc, pri: sig, req_id: 0, comms, store, on_rx: None })
     }
 
     pub fn set_handler(&mut self, on_rx: &'a mut dyn FnMut(&Page)) {
@@ -124,7 +129,7 @@ impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: u
         // Setup page options for encoding
         let page_opts = DataOptions {
             body: Body::Cleartext(body.to_vec()),
-            public_options: opts.to_vec(),
+            public_options: opts,
             ..Default::default()
         };
 
@@ -257,17 +262,39 @@ impl <'a, A: Clone + Debug, C: Comms<Address=A>, S: Store<Address=A>, const N: u
         // Handle request messages
         let resp: EngineResponse = match &req.data {
             Hello | Ping => NetResponseKind::Status(Status::Ok).into(),
-            Discover => {
+            Discover(body, options) => {
                 debug!("Received discovery from {} ({:?})", req.common.from, from);
 
-                // TODO: check discovery filters etc.
+                let mut matches = false;
 
-                // Respond with page if filters pass
-                if let Some(p) = self.store.fetch_page(&self.pri)
-                        .map_err(EngineError::Store)? {
-                    p.into()
-                } else {
+                // Iterate through matching endpoints
+                for e in Descriptor::parse_iter(body).filter_map(|d| d.ok() ) {
+                    if self.descriptors.as_ref().contains(&e) {
+                        debug!("Filter match on endpoint: {:?}", e);
+                        matches = true;
+                        break;
+                    }
+                }
+
+                // Iterate through matching options
+                for o in options {
+                    if self.svc.public_options().contains(o) {
+                        debug!("Filter match on option: {:?}", o);
+                        matches = true;
+                        break;
+                    }
+                }
+
+                if !matches {
+                    debug!("No match for discovery message");
                     EngineResponse::None
+                    
+                } else {
+                    // Respond with page if filters pass
+                    match self.store.fetch_page(&self.pri) {
+                        Ok(Some(p)) => p.into(),
+                        _ => EngineResponse::None,
+                    }
                 }
             },
             Query(id) if id == &self.svc.id() => {
@@ -399,6 +426,7 @@ mod test {
 
     use dsf_core::prelude::*;
     use dsf_core::net::Status;
+    use dsf_core::options::Metadata;
     
     use crate::endpoint::{self as ep};
     use crate::service::{IotService, IotData};
@@ -408,7 +436,7 @@ mod test {
     use super::comms::MockComms;
 
     // Setup an engine instance for testing
-    fn setup<'a>() -> (Service, Engine<'a, MockComms, MemoryStore<u8>>) {
+    fn setup<'a>() -> (Service, Engine<'a, MockComms, Vec<Descriptor>, MemoryStore<u8>>) {
         // Setup debug logging
         let _ = simplelog::SimpleLogger::init(simplelog::LevelFilter::Debug, simplelog::Config::default());
 
@@ -419,8 +447,15 @@ mod test {
         let mut s = MemoryStore::<u8>::new();
         s.update(&p.id(), |k| *k = p.keys() );
 
+        // Setup descriptors
+        let descriptors: Vec<Descriptor> = vec![
+            (ep::Kind::Temperature, ep::Flags::R).into(),
+            (ep::Kind::Pressure, ep::Flags::R).into(),
+            (ep::Kind::Humidity, ep::Flags::R).into(),
+        ];
+
         // Setup engine with default service
-        let e = Engine::new(ServiceBuilder::generic(), MockComms::default(), s)
+        let e = Engine::new(descriptors, MockComms::default(), s)
                 .expect("Failed to create engine");
 
         (p, e)
@@ -492,6 +527,22 @@ mod test {
         assert_eq!(e.store.peers.get(&p.id()).map(|p| p.subscriber ), Some(false));
     }
 
+    #[test]
+    fn test_handle_discover() {
+        let (p, mut e) = setup();
+        let from = 1;
+
+        // Build net request and execute
+        let ep_filter: &[Descriptor] = &[(ep::Kind::Temperature, ep::Flags::R).into()];
+        let (body, n) = ep_filter.encode_buff::<128>().unwrap();
+        let req = NetRequest::new(p.id(), 1, NetRequestKind::Discover((&body[..n]).to_vec(), vec![]), Flags::empty());
+        let resp = e.handle_req(&from, req).expect("Failed to handle message");
+
+        // Check response
+        let ex = NetResponse::new(e.svc.id(), 1, NetResponseKind::Status(Status::Ok), Flags::empty());
+        assert_eq!(resp, e.store.fetch_page(&e.pri).unwrap().unwrap().into());
+    }
+
 
     #[test]
     fn test_publish() {
@@ -505,7 +556,7 @@ mod test {
         }).unwrap();
 
         // Build object for publishing
-        let endpoint_data = [
+        let endpoint_data: [ep::Data<&'_ [Metadata]>; 3] = [
             ep::Data::new(27.3.into(), &[]),
             ep::Data::new(1016.2.into(), &[]),
             ep::Data::new(59.6.into(), &[]),
@@ -580,4 +631,7 @@ mod test {
         e.handle_page(&from, sp.clone()).expect("Failed to handle page");
         assert_eq!(Some(sp), new_page);
     }
+
+
+
 }
