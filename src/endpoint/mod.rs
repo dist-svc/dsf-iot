@@ -1,6 +1,8 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
+use core::fmt::Debug;
+
 use log::{error, trace, warn};
 
 use byteorder::{ByteOrder, NetworkEndian};
@@ -25,6 +27,7 @@ pub mod iot_option_kinds {
     pub const VALUE_BOOL_TRUE: u16      = 0x0003 | (1 << 15);
     pub const VALUE_FLOAT: u16          = 0x0004 | (1 << 15); 
     pub const VALUE_STRING: u16         = 0x0005 | (1 << 15);
+    pub const VALUE_INT: u16            = 0x0006 | (1 << 15);
 
     pub const ENDPOINT_DESCRIPTOR_LEN: usize = 4;
 }
@@ -47,7 +50,7 @@ bitflags::bitflags! {
 /// An endpoint descriptor defines the kind of an endpoint
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Descriptor<M: AsRef<[Metadata]> = Vec<Metadata>> {
+pub struct Descriptor<M: AsRef<[Metadata]> + Debug = Vec<Metadata>> {
     /// Endpoint Kind
     pub kind: Kind,
 
@@ -59,7 +62,7 @@ pub struct Descriptor<M: AsRef<[Metadata]> = Vec<Metadata>> {
 }
 
 
-impl <M: AsRef<[Metadata]>> Descriptor<M> {
+impl <M: AsRef<[Metadata]> + Debug> Descriptor<M> {
     pub fn new(kind: Kind, flags: Flags, meta: M) -> Self {
         Self {
             kind,
@@ -82,19 +85,19 @@ impl <M: AsRef<[Metadata]>> Descriptor<M> {
     }
 }
 
-impl <M: AsRef<[Metadata]>> From<(Kind, Flags, M)> for Descriptor<M> {
+impl <M: AsRef<[Metadata]> + Debug> From<(Kind, Flags, M)> for Descriptor<M> {
     fn from(v: (Kind, Flags, M)) -> Self {
         Self::new(v.0, v.1, v.2)
     }
 }
 
-impl <M: AsRef<[Metadata]> + Default> From<(Kind, Flags)> for Descriptor<M> {
+impl <M: AsRef<[Metadata]> + Debug + Default> From<(Kind, Flags)> for Descriptor<M> {
     fn from(v: (Kind, Flags)) -> Self {
         Self::new(v.0, v.1, M::default())
     }
 }
 
-impl <M: AsRef<[Metadata]>> dsf_core::base::Encode for Descriptor<M> {
+impl <M: AsRef<[Metadata]> + Debug> dsf_core::base::Encode for Descriptor<M> {
     type Error = Error;
 
     fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
@@ -159,7 +162,7 @@ pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, String> {
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Data<M: AsRef<[Metadata]> = Vec<Metadata>> {
+pub struct Data<M: AsRef<[Metadata]> + Debug = Vec<Metadata>> {
     // Measurement value
     pub value: Value,
 
@@ -167,7 +170,7 @@ pub struct Data<M: AsRef<[Metadata]> = Vec<Metadata>> {
     pub meta: M,
 }
 
-impl <M: AsRef<[Metadata]>> Data<M> {
+impl <M: AsRef<[Metadata]> + Debug> Data<M> {
     pub fn new(value: Value, meta: M) -> Self {
         Self {
             value,
@@ -198,6 +201,10 @@ impl dsf_core::base::Parse for Data {
                 let s = core::str::from_utf8(&buff[4..]).unwrap();
                 Value::Text(s.to_owned())
             }
+            VALUE_INT => {
+                let f = NetworkEndian::read_i32(&buff[4..]);
+                Value::Int32(f)
+            }
             _ => {
                 error!("Unrecognised option kind: 0x{:x?}", kind);
                 return Err(Error::InvalidOption);
@@ -217,7 +224,7 @@ impl dsf_core::base::Parse for Data {
 }
 
 
-impl <M: AsRef<[Metadata]>> dsf_core::base::Encode for Data<M> {
+impl <M: AsRef<[Metadata]> + Debug> dsf_core::base::Encode for Data<M> {
     type Error = Error;
 
     fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
@@ -241,6 +248,12 @@ impl <M: AsRef<[Metadata]>> dsf_core::base::Encode for Data<M> {
                 NetworkEndian::write_f32(&mut buff[4..], *v);
                 8
             }
+            Value::Int32(v) => {
+                NetworkEndian::write_u16(&mut buff[0..], VALUE_INT);
+                NetworkEndian::write_u16(&mut buff[2..], 4);
+                NetworkEndian::write_i32(&mut buff[4..], *v);
+                8
+            }
             Value::Text(v) => {
                 let b = v.as_bytes();
 
@@ -249,7 +262,7 @@ impl <M: AsRef<[Metadata]>> dsf_core::base::Encode for Data<M> {
                 (&mut buff[4..4 + b.len()]).copy_from_slice(b);
                 4 + b.len()
             }
-            _ => unimplemented!(),
+            _ => unimplemented!("Encode not yet implemented for value: {:?}", self),
         };
 
         // TODO: write metadata

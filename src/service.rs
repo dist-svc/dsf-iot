@@ -1,5 +1,6 @@
 use core::convert::TryFrom;
-use std::marker::PhantomData;
+use core::marker::PhantomData;
+use core::fmt::Debug;
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -200,7 +201,7 @@ impl IotData {
         Ok(s)
     }
 
-    pub fn encode_data<M: AsRef<[Metadata]>>(data: &[ep::Data<M>], buff: &mut [u8]) -> Result<usize, IotError> {
+    pub fn encode_data<M: AsRef<[Metadata]> + Debug>(data: &[ep::Data<M>], buff: &mut [u8]) -> Result<usize, IotError> {
         let mut index = 0;
 
         // Encode each endpoint entry

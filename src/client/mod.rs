@@ -267,7 +267,7 @@ impl IotClient {
 
         // Encode generate service page
         let mut buff = vec![0u8; 1024];
-        let (n, p) = s.publish_primary(&mut buff)?;
+        let (n, p) = s.publish_primary(Default::default(), &mut buff)?;
 
         info!("Created page: {:?}", p);
 

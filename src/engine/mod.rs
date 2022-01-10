@@ -133,19 +133,24 @@ where
 
         // Generate initial page
         let mut page_buff = [0u8; N];
-        let (_n, p) = svc.publish_primary(&mut page_buff)
+        let (_n, p) = svc.publish_primary(Default::default(), &mut page_buff)
             .map_err(EngineError::Core)?;
         
-        let sig = p.signature().unwrap();
+        let sig = p.signature();
 
         debug!("Generated new page: {:?} sig: {}", p, sig);
+
+        // TODO: port store from pages to containers
+        let page = Page::try_from(p)
+            .map_err(EngineError::Core)?;
 
         // Update last signature in store
         store.set_last_sig(&sig)
             .map_err(EngineError::Store)?;
 
+
         // Store page if possible
-        store.store_page(&sig, &p)
+        store.store_page(&sig, &page)
             .map_err(EngineError::Store)?;
 
         // TODO: setup forward to subscribers?
@@ -174,16 +179,21 @@ where
 
         // Setup page options for encoding
         let page_opts = DataOptions {
-            body: Body::Cleartext(body.to_vec()),
+            body,
             public_options: opts,
             ..Default::default()
         };
 
         // Publish data to buffer
-        let (n, page_buff, page) = self.svc.publish_data_buff::<512>(page_opts).map_err(EngineError::Core)?;
+        let (n, p) = self.svc.publish_data_buff(page_opts)
+            .map_err(EngineError::Core)?;
 
-        let data = &page_buff[..n];
-        let sig = page.signature().unwrap();
+        let data = p.raw();
+        let sig = p.signature();
+
+        // TODO: swap store from page to container
+        let page = Page::try_from(p.clone())
+            .map_err(EngineError::Core)?;
 
         // Update last sig
         self.store.set_last_sig(&sig)
@@ -226,10 +236,11 @@ where
         // Send subscribe request
         // TODO: how to separate target -service- from target -peer-
         let req = NetRequest::new(self.svc.id(), req_id, NetRequestKind::Subscribe(id), Flags::empty());
-        let (n, buff) = self.svc.encode_message_buff::<_, 512>(req)
+        // TODO: include peer keys here if available
+        let c = self.svc.encode_request_buff(&req, &Default::default())
                 .map_err(EngineError::Core)?;
 
-        self.comms.send(&addr, &buff[..n]).map_err(EngineError::Comms)?;
+        self.comms.send(&addr, c.raw()).map_err(EngineError::Comms)?;
 
         debug!("Subscribe TX done (req_id: {})", req_id);
 
@@ -278,10 +289,11 @@ where
                 self.req_id = self.req_id.wrapping_add(1);
                 let r = NetResponse::new(self.svc.id(), self.req_id, net, Flags::empty());
 
-                let (n, buff) = self.svc.encode_message_buff::<_, 512>(NetMessage::Response(r))
+                // TODO: pass peer keys here
+                let c = self.svc.encode_response_buff(&r, &Default::default())
                     .map_err(EngineError::Core)?;
                 
-                self.comms.send(&from, &buff[..n]).map_err(EngineError::Comms)?;
+                self.comms.send(&from, c.raw()).map_err(EngineError::Comms)?;
             },
             EngineResponse::Page(p) => {
                 debug!("Sending page to: {:?}", from);
