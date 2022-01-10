@@ -19,7 +19,7 @@ use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
 #[cfg(feature = "dsf-rpc")]
 use dsf_rpc::data::DataInfo;
 
-use crate::endpoint::{self as ep, parse_endpoint_descriptor};
+use crate::endpoint::{self as ep, parse_endpoint_descriptor, StringIsh, MetaIsh, BytesIsh};
 use crate::error::IotError;
 
 pub const IOT_APP_ID: u16 = 1;
@@ -201,7 +201,7 @@ impl IotData {
         Ok(s)
     }
 
-    pub fn encode_data<M: AsRef<[Metadata]> + Debug>(data: &[ep::Data<M>], buff: &mut [u8]) -> Result<usize, IotError> {
+    pub fn encode_data<S: StringIsh, B: BytesIsh, M: MetaIsh>(data: &[ep::Data<S, B, M>], buff: &mut [u8]) -> Result<usize, IotError> {
         let mut index = 0;
 
         // Encode each endpoint entry

@@ -614,7 +614,7 @@ mod test {
         }).unwrap();
 
         // Build object for publishing
-        let endpoint_data: [ep::Data<&'_ [Metadata]>; 3] = [
+        let endpoint_data: [ep::Data<&str, &[u8], &'_ [Metadata]>; 3] = [
             ep::Data::new(27.3.into(), &[]),
             ep::Data::new(1016.2.into(), &[]),
             ep::Data::new(59.6.into(), &[]),
