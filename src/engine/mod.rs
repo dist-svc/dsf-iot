@@ -4,7 +4,7 @@ use core::convert::TryFrom;
 use log::{debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
-use dsf_core::base::{Parse, Encode};
+use dsf_core::base::{Parse, Encode, PageBody, DataBody};
 
 use crate::{IOT_APP_ID};
 use crate::endpoint::{Descriptor};
@@ -67,10 +67,6 @@ impl From<Page> for EngineResponse {
     }
 }
 
-pub trait EngineBody: Filter<Self::Body> + Parse<Output=Self::Body> + Encode {
-    type Body;
-}
-
 pub trait Filter<V> {
     fn matches(&self, v: V) -> bool;
 }
@@ -85,16 +81,6 @@ impl <V: PartialEq> Filter<V> for &[V] {
     fn matches(&self, v: V) -> bool {
         self.contains(&v)
     }
-}
-
-impl EngineBody for Vec<u8> {
-    type Body = Vec<u8>;
-}
-
-pub struct ServiceOptions<B: EngineBody = Vec<u8>, P: AsRef<[Options]> = Vec<Options>, O: AsRef<[Options]> = Vec<Options>> {
-    pub body: B,
-    pub public_options: P,
-    pub private_options: O,
 }
 
 impl <'a, A, C, D, S, const N: usize> Engine<'a, C, D, S, N> 
@@ -173,13 +159,13 @@ where
     }
 
     /// Publish service data
-    pub fn publish(&mut self, body: &[u8], opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    pub fn publish<B: DataBody>(&mut self, body: B, opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         
         // TODO: Fetch last signature / associated primary page
 
         // Setup page options for encoding
-        let page_opts = DataOptions {
-            body,
+        let page_opts = DataOptions::<B>{
+            body: Some(body),
             public_options: opts,
             ..Default::default()
         };
@@ -614,14 +600,14 @@ mod test {
         }).unwrap();
 
         // Build object for publishing
-        let endpoint_data: [ep::Data<&str, &[u8], &'_ [Metadata]>; 3] = [
-            ep::Data::new(27.3.into(), &[]),
-            ep::Data::new(1016.2.into(), &[]),
-            ep::Data::new(59.6.into(), &[]),
-        ];
+        let endpoint_data = IotData::new([
+            ep::DataRef::new(27.3.into(), &[]),
+            ep::DataRef::new(1016.2.into(), &[]),
+            ep::DataRef::new(59.6.into(), &[]),
+        ]);
 
         let mut data_buff = [0u8; 128];
-        let n = IotData::encode_data(&endpoint_data, &mut data_buff).unwrap();
+        let n = endpoint_data.encode(&mut data_buff).unwrap();
 
         // Call publish operation
         e.publish(&data_buff[..n], &[])
@@ -672,7 +658,9 @@ mod test {
 
         // Respond with subscribe ok
         let mut buff = [0u8; 512];
-        let (_n, sp) = p.publish_primary(&mut buff).unwrap();
+        let (_n, sp) = p.publish_primary(Default::default(), &mut buff).unwrap();
+
+        let sp = Page::try_from(sp).unwrap();
 
         let resp = NetResponse::new(p.id(), e.req_id, NetResponseKind::Status(Status::Ok), Flags::empty());
         e.handle_resp(&from, resp).expect("Response handling failed");

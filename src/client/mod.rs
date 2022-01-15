@@ -18,7 +18,7 @@ use dsf_core::types::DataKind;
 
 pub use dsf_client::{Error, Options};
 pub use dsf_rpc::ServiceIdentifier;
-use rpc::FetchOptions;
+use rpc::{FetchOptions, DataInfo};
 
 use crate::error::IotError;
 use crate::prelude::Descriptor;
@@ -182,7 +182,7 @@ impl IotClient {
     pub async fn query(
         &mut self,
         options: QueryOptions,
-    ) -> Result<(IotService, Vec<IotData>), IotError> {
+    ) -> Result<(IotService, Vec<(DataInfo, IotData<IdkOwned>)>), IotError> {
         debug!("Querying for data: {:?}", options);
 
         let iot_info = self
@@ -195,8 +195,14 @@ impl IotClient {
 
         let mut data_info = self.client.data(options).await?;
 
-        let iot_data = data_info.drain(..).filter_map(|v| {
-            IotData::decode(v, None).ok()
+        let iot_data = data_info.drain(..).filter_map(|i| {
+            // TODO: handle keys correctly / usefully.
+            let body = match &i.body {
+                MaybeEncrypted::Cleartext(b) => b,
+                _ => return None,
+            };
+
+            IotData::parse(body).map(|v| (i, v.0)).ok()
         }).collect();
 
         Ok((iot_info, iot_data))

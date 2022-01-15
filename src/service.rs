@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use alloc::vec;
 
-use dsf_core::base::{Body, Parse, Encode};
+use dsf_core::base::{Body, Parse, Encode, DataBody};
 use dsf_core::options::Metadata;
 use dsf_core::page::Page;
 use dsf_core::types::*;
@@ -28,6 +28,39 @@ pub const IOT_SERVICE_PAGE_KIND: u16 = 1;
 pub const IOT_DATA_PAGE_KIND: u16 = 2;
 
 pub trait EndpointContainer: AsRef<ep::Descriptor> {}
+
+pub trait Idk<Inner>: Debug {
+    type Container: AsRef<[Inner]> + Debug;
+    type String: AsRef<str> + Debug;
+    type Bytes: AsRef<[u8]> + Debug;
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct IdkOwned;
+
+impl <T: Debug> Idk<T> for IdkOwned {
+    type Container = Vec<T>;
+    type String = String;
+    type Bytes = Vec<u8>;
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct IdkRef<'a> (PhantomData<&'a ()>);
+
+impl <'a, T: Debug + 'a> Idk<T> for IdkRef<'a> {
+    type Container = &'a [T];
+    type String = &'a str;
+    type Bytes = &'a [u8];
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct IdkConst<const N: usize>;
+
+impl <T: Debug, const N: usize> Idk<T> for IdkConst<N> {
+    type Container = [T; N];
+    type String = &'static str;
+    type Bytes = [u8; N];
+}
 
 #[derive(Debug, Clone)]
 //#[cfg_attr(feature = "structopt", derive(structopt::StructOpt))]
@@ -65,7 +98,7 @@ pub trait Application<PRI, DAT> {
 
 }
 
-impl Application<ep::Descriptor, ep::Data> for dsf_core::service::Service {
+impl Application<ep::Descriptor, ep::DataOwned> for dsf_core::service::Service {
     const APPLICATION_ID: u16 = 0x0001;
 
 }
@@ -138,81 +171,44 @@ impl IotService {
 }
 
 #[derive(Debug, Clone)]
-pub struct IotData {
-    pub index: u16,
-    pub signature: Signature,
-    pub previous: Option<Signature>,
-
+pub struct IotData<C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug = Vec<ep::DataOwned>> {
     /// Measurement values (these must correspond with service endpoints)
-    pub data: Vec<ep::Data>,
+    pub data: D,
 
-    /// Measurement metadata
-    pub meta: Vec<(String, String)>,
+    _c: PhantomData<C>,
 }
 
-impl IotData {
-    // TODO: remove this, duplicates decode_page but worse for RPC
-    #[cfg(feature = "dsf-rpc")]
-    pub fn decode(mut i: DataInfo, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
-
-        if let Some(sk) = &secret_key {
-
-        }
-
-        let data = match &i.body {
-            Body::Cleartext(b) => IotData::decode_data(&b)?,
-            Body::Encrypted(_e) => return Err(IotError::NoSecretKey),
-            Body::None => return Err(IotError::NoBody),
-        };
-
-        // TODO: pass through metadata
-        let s = IotData {
-            index: i.index,
-            signature: i.signature,
-            previous: i.previous,
-            data,
-            meta: vec![],
-        };
-
-        Ok(s)
+impl <C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> IotData<C, D> {
+    pub fn new(data: D) -> Self {
+        Self{ data, _c: PhantomData }
     }
+}
 
-    pub fn decode_page(mut p: Page, secret_key: Option<&SecretKey>) -> Result<IotData, IotError> {
+/// DataBody marker allows this to be used with [`dsf_core::Service::publish_data`]
+impl <C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> DataBody for IotData<C, D> {}
 
-        if let Some(sk) = &secret_key {
-            p.decrypt(sk)?;
-        }
+/// All storage types are 
+impl <C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> Encode for IotData<C, D> {
+    type Error = IotError;
 
-        let data = match &p.body {
-            Body::Cleartext(b) => IotData::decode_data(&b)?,
-            Body::Encrypted(_e) => return Err(IotError::NoSecretKey),
-            Body::None => return Err(IotError::NoBody),
-        };
-
-        // TODO: pass through metadata
-        let s = IotData {
-            index: p.header.index,
-            signature: p.signature.unwrap(),
-            previous: p.previous_sig,
-            data,
-            meta: vec![],
-        };
-
-        Ok(s)
-    }
-
-    pub fn encode_data<S: StringIsh, B: BytesIsh, M: MetaIsh>(data: &[ep::Data<S, B, M>], buff: &mut [u8]) -> Result<usize, IotError> {
+    fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
         let mut index = 0;
 
         // Encode each endpoint entry
-        for ed in data {
+        for ed in self.data.as_ref() {
             index += ed.encode(&mut buff[index..])?;
         }
 
         Ok(index)
     }
+}
 
-    pub fn decode_data(buff: &[u8]) -> Result<Vec<ep::Data>, IotError> {
+impl Parse for IotData<IdkOwned> {
+    type Output = IotData<IdkOwned>;
+
+    type Error = IotError;
+
+    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         let mut index = 0;
         let mut data = vec![];
 
@@ -224,6 +220,11 @@ impl IotData {
             index += n;
         }
 
-        Ok(data)
+        Ok((IotData{data, _c: PhantomData}, index))
     }
+}
+
+#[cfg(test)]
+mod test {
+
 }

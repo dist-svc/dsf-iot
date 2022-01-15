@@ -9,7 +9,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 
 use dsf_core::error::Error;
 use dsf_core::options::Metadata;
-use dsf_core::base::{Parse as _, Encode as _};
+use dsf_core::base::{Parse as _, Encode as _, PageBody};
 
 pub mod kinds;
 pub use kinds::*;
@@ -19,6 +19,8 @@ pub use value::*;
 
 pub mod meta;
 pub use meta::*;
+
+use crate::service::{Idk, IdkRef, IdkOwned};
 
 /// IoT Option IDs, used for identifying descriptors and data.
 pub mod iot_option_kinds {
@@ -168,21 +170,20 @@ pub trait StringIsh = AsRef<str> + Debug;
 
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Data<S: StringIsh = String, B: BytesIsh = Vec<u8>, M: MetaIsh = Vec<Metadata>> {
+pub struct Data<C: Idk<Metadata> = IdkOwned> {
     // Measurement value
-    pub value: Value<S, B>,
+    pub value: Value<C::String, C::Bytes>,
 
     /// Measurement metadata
-    pub meta: M,
+    pub meta: C::Container,
 }
 
-pub type DataRef<'a> = Data<&'a str, &'a [u8], &'a [Metadata]>;
+pub type DataRef<'a> = Data<IdkRef<'a>>;
 
-pub type DataOwned<'a> = Data<String, Vec<u8>, Vec<Metadata>>;
+pub type DataOwned = Data<IdkOwned>;
 
-impl <S: StringIsh, B: BytesIsh, M: MetaIsh> Data<S, B, M> {
-    pub fn new(value: Value<S, B>, meta: M) -> Self {
+impl <C: Idk<Metadata>> Data<C> {
+    pub fn new(value: Value<C::String, C::Bytes>, meta: C::Container) -> Self {
         Self {
             value,
             meta,
@@ -190,9 +191,9 @@ impl <S: StringIsh, B: BytesIsh, M: MetaIsh> Data<S, B, M> {
     }
 }
 
-impl dsf_core::base::Parse for Data {
+impl dsf_core::base::Parse for DataOwned {
     type Error = Error;
-    type Output = Data;
+    type Output = DataOwned;
 
     fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         use iot_option_kinds::*;
@@ -239,7 +240,7 @@ impl dsf_core::base::Parse for Data {
 }
 
 
-impl <S: StringIsh, B: BytesIsh, M: MetaIsh> dsf_core::base::Encode for Data<S, B, M> {
+impl <C: Idk<Metadata>> dsf_core::base::Encode for Data<C> {
     type Error = Error;
 
     fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
@@ -294,8 +295,7 @@ impl <S: StringIsh, B: BytesIsh, M: MetaIsh> dsf_core::base::Encode for Data<S, 
     }
 }
 
-
-pub fn parse_endpoint_data(src: &str) -> Result<Data, String> {
+pub fn parse_endpoint_data(src: &str) -> Result<DataOwned, String> {
     let value = parse_endpoint_value(src)?;
     Ok(Data::new(value, vec![]))
 }

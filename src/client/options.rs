@@ -1,4 +1,5 @@
 use core::convert::TryInto;
+use std::marker::PhantomData;
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -7,7 +8,7 @@ use bytes::BytesMut;
 
 use structopt::StructOpt;
 
-use dsf_core::base::MaybeEncrypted;
+use dsf_core::base::{MaybeEncrypted, Encode};
 use dsf_core::types::{DataKind, SecretKey};
 use dsf_core::options::Options;
 use dsf_core::keys::Keys;
@@ -115,7 +116,7 @@ pub struct PublishOptions {
 
     /// Measurement values (these must correspond with service endpoints)
     #[structopt(short, long, parse(try_from_str = parse_endpoint_data))]
-    pub data: Vec<ep::Data>,
+    pub data: Vec<ep::DataOwned>,
 
     /// Measurement metadata
     #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
@@ -129,7 +130,9 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
     fn try_into(self) -> Result<dsf_rpc::PublishOptions, Self::Error> {
         let mut body = BytesMut::new();
 
-        let n = IotData::encode_data(&self.data, &mut body)?;
+        let data = IotData::new(self.data);
+
+        let n = data.encode(&mut body)?;
 
         let po = dsf_rpc::PublishOptions {
             service: self.service,

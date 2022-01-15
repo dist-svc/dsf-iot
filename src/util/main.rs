@@ -1,6 +1,9 @@
 extern crate structopt;
 use std::any;
 
+use dsf_core::options::Metadata;
+use dsf_iot::service::{Idk, IdkOwned};
+use dsf_rpc::DataInfo;
 use structopt::StructOpt;
 
 extern crate futures;
@@ -146,15 +149,15 @@ fn print_service_list(services: &[IotService]) {
     }
 }
 
-fn print_service_data(service: &IotService, data: &[IotData]) {
+fn print_service_data(service: &IotService, data: &[(DataInfo, IotData<IdkOwned>)]) {
     println!("Service ID: {}", service.id);
     println!("Data: ");
 
-    for d in data {
-        let sig = d.signature.to_string();
-        let prev = d.previous.as_ref().map(|v| v.to_string() ).unwrap_or("none".to_string());
+    for (i, d) in data {
+        let sig = i.signature.to_string();
+        let prev = i.previous.as_ref().map(|v| v.to_string() ).unwrap_or("none".to_string());
 
-        println!("Object: {} index: {} (previous: {})", &sig[..16], d.index, prev);
+        println!("Object: {} index: {} (previous: {})", &sig[..16], i.index, prev);
 
         for i in 0..d.data.len() {
             let ep_info = &service.endpoints[i];

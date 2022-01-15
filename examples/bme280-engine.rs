@@ -83,9 +83,9 @@ fn main() -> Result<(), anyhow::Error> {
         let m = bme280.measure().unwrap();
 
         let data = [
-            Data::new(m.temperature.into(), vec![]),
-            Data::new((m.pressure / 1000.0).into(), vec![]),
-            Data::new(m.humidity.into(), vec![]),
+            DataRef::new(m.temperature.into(), &[]),
+            DataRef::new((m.pressure / 1000.0).into(), &[]),
+            DataRef::new(m.humidity.into(), &[]),
         ];
 
         println!("Measurement: {:?}", data);
