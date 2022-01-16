@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 use core::convert::TryFrom;
 
+use dsf_core::wire::Container;
 use log::{debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
@@ -250,7 +251,7 @@ where
         debug!("Received {} bytes from {:?}", data.len(), from);
 
         // Parse base object
-        let (base, _n) = match Base::parse(data, &self.store) {
+        let base = match Container::parse(data, &self.store) {
             Ok(v) => (v),
             Err(e) => {
                 error!("DSF parsing error: {:?}", e);
@@ -618,7 +619,7 @@ mod test {
         assert_eq!(d.0, from);
 
         // Parse out page
-        let (b, _n) = Base::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
+        let b = Container::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
 
         // TODO: translate back to IoT data and check
 
@@ -647,7 +648,7 @@ mod test {
 
 
         // Parse out page and convert back to message
-        let (b, _n) = Base::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
+        let b = Container::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
         let m = NetMessage::convert(b, &e.store).expect("Failed to convert message");
 
         let expected = NetRequest::new(e.svc.id(), e.req_id, 
