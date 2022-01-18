@@ -3,7 +3,6 @@ use core::fmt::Debug;
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use byteorder::{ByteOrder, NetworkEndian};
 
 use super::{BytesIsh, StringIsh};
 

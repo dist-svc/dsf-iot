@@ -2,6 +2,7 @@
 use alloc::vec::Vec;
 
 use core::fmt::Debug;
+use std::fmt::Display;
 
 use log::{error, trace, warn};
 
@@ -9,7 +10,6 @@ use byteorder::{ByteOrder, NetworkEndian};
 
 use dsf_core::error::Error;
 use dsf_core::options::Metadata;
-use dsf_core::base::{Parse as _, Encode as _, PageBody};
 
 pub mod kinds;
 pub use kinds::*;
@@ -19,8 +19,6 @@ pub use value::*;
 
 pub mod meta;
 pub use meta::*;
-
-use crate::service::{Idk, IdkRef, IdkOwned};
 
 /// IoT Option IDs, used for identifying descriptors and data.
 pub mod iot_option_kinds {
@@ -53,7 +51,7 @@ bitflags::bitflags! {
 /// An endpoint descriptor defines the kind of an endpoint
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Descriptor<M: MetaIsh = Vec<Metadata>> {
+pub struct Descriptor<M: stor::Stor<Metadata> + Debug = stor::Owned> {
     /// Endpoint Kind
     pub kind: Kind,
 
@@ -61,21 +59,21 @@ pub struct Descriptor<M: MetaIsh = Vec<Metadata>> {
     pub flags: Flags,
 
     /// Endpoint metadata
-    pub meta: M,
+    pub meta: M::List,
 }
 
 
-impl <M: MetaIsh> Descriptor<M> {
-    pub fn new(kind: Kind, flags: Flags, meta: M) -> Self {
+impl <M: stor::Stor<Metadata> + Debug> Descriptor<M> {
+    pub fn new(kind: Kind, flags: Flags, meta: M::List) -> Self {
         Self {
             kind,
             flags,
-            meta: meta,
+            meta,
         }
     }
 
     #[cfg(feature = "alloc")]
-    pub fn display(eps: &[Descriptor]) -> String {
+    pub fn display(eps: &[Descriptor<M>]) -> String {
         let mut s = String::new();
 
         s.push_str("Endpoints: \r\n");
@@ -88,19 +86,7 @@ impl <M: MetaIsh> Descriptor<M> {
     }
 }
 
-impl <M: MetaIsh> From<(Kind, Flags, M)> for Descriptor<M> {
-    fn from(v: (Kind, Flags, M)) -> Self {
-        Self::new(v.0, v.1, v.2)
-    }
-}
-
-impl <M: MetaIsh + Default> From<(Kind, Flags)> for Descriptor<M> {
-    fn from(v: (Kind, Flags)) -> Self {
-        Self::new(v.0, v.1, M::default())
-    }
-}
-
-impl <M: MetaIsh> dsf_core::base::Encode for Descriptor<M> {
+impl <M: stor::Stor<Metadata>> dsf_core::base::Encode for Descriptor<M> {
     type Error = Error;
 
     fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
@@ -170,20 +156,20 @@ pub trait StringIsh = AsRef<str> + Debug;
 
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq)]
-pub struct Data<C: Idk<Metadata> = IdkOwned> {
+pub struct Data<C: stor::Stor<Metadata> = stor::Owned> {
     // Measurement value
     pub value: Value<C::String, C::Bytes>,
 
     /// Measurement metadata
-    pub meta: C::Container,
+    pub meta: C::List,
 }
 
-pub type DataRef<'a> = Data<IdkRef<'a>>;
+pub type DataRef<'a> = Data<stor::Ref<'a>>;
 
-pub type DataOwned = Data<IdkOwned>;
+pub type DataOwned = Data<stor::Owned>;
 
-impl <C: Idk<Metadata>> Data<C> {
-    pub fn new(value: Value<C::String, C::Bytes>, meta: C::Container) -> Self {
+impl <C: stor::Stor<Metadata>> Data<C> {
+    pub fn new(value: Value<C::String, C::Bytes>, meta: C::List) -> Self {
         Self {
             value,
             meta,
@@ -240,7 +226,7 @@ impl dsf_core::base::Parse for DataOwned {
 }
 
 
-impl <C: Idk<Metadata>> dsf_core::base::Encode for Data<C> {
+impl <C: stor::Stor<Metadata>> dsf_core::base::Encode for Data<C> {
     type Error = Error;
 
     fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
@@ -304,7 +290,7 @@ pub fn parse_endpoint_data(src: &str) -> Result<DataOwned, String> {
 mod tests {
     use super::*;
 
-    use dsf_core::base::Encode;
+    use dsf_core::{base::Encode, prelude::Parse};
 
     #[test]
     fn encode_decode_endpoint_descriptor() {

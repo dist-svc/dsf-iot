@@ -1,8 +1,6 @@
 
 use core::fmt::Debug;
 
-use dsf_core::service::ServiceBuilder;
-
 use crate::prelude::Descriptor;
 
 use super::{Engine, Store, EngineError};
@@ -99,7 +97,7 @@ impl Comms for MockComms {
 
     type Error = core::convert::Infallible;
 
-    fn recv(&mut self, buff: &mut [u8]) -> Result<Option<(usize, Self::Address)>, Self::Error> {
+    fn recv(&mut self, _buff: &mut [u8]) -> Result<Option<(usize, Self::Address)>, Self::Error> {
         todo!()
     }
 
@@ -108,7 +106,7 @@ impl Comms for MockComms {
         Ok(())
     }
 
-    fn broadcast(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+    fn broadcast(&mut self, _data: &[u8]) -> Result<(), Self::Error> {
         todo!()
     }
 }

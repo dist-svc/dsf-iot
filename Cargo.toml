@@ -12,7 +12,7 @@ util = [ "client", "structopt", "dsf-core/structopt" ]
 std = [ "dsf-core/std", "dsf-rpc", "dsf-client", "thiserror" ]
 alloc = [ "dsf-core/alloc", "pretty-hex/alloc" ]
 
-default = [ "client", "util", "std", "alloc" ]
+default = [ "client", "util", "std", "alloc", "dsf-rpc" ]
 
 # Debian package configuration (for cargo-deb)
 [package.metadata.deb]
@@ -44,6 +44,7 @@ strum_macros = { version = "0.20.1", optional = true }
 anyhow = { version = "1.0.44", optional = true }
 thiserror = { version = "*", optional = true }
 pretty-hex = { version = "0.2.1", default_features = false }
+stor = "0.1.0"
 
 
 [dependencies.dsf-core]

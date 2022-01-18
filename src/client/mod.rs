@@ -1,10 +1,8 @@
-use core::convert::{TryFrom, TryInto};
+use core::convert::{TryInto};
 
 use dsf_core::options::Metadata;
 use futures::prelude::*;
 use log::{debug, info, warn};
-
-use bytes::BytesMut;
 
 #[cfg(feature="alloc")]
 use pretty_hex::*;
@@ -107,7 +105,7 @@ impl IotClient {
             let iot_svc = match IotService::decode_page(p, i.secret_key.as_ref()) {
                 Ok(v) => v,
                 Err(e) => {
-                    warn!("Failed to decode page {} for service {}", page_sig, i.id);
+                    warn!("Failed to decode page {} for service {}: {:?}", page_sig, i.id, e);
                     continue;
                 },
             };
@@ -182,7 +180,7 @@ impl IotClient {
     pub async fn query(
         &mut self,
         options: QueryOptions,
-    ) -> Result<(IotService, Vec<(DataInfo, IotData<IdkOwned>)>), IotError> {
+    ) -> Result<(IotService, Vec<(DataInfo, IotData<stor::Owned>)>), IotError> {
         debug!("Querying for data: {:?}", options);
 
         let iot_info = self
@@ -303,13 +301,14 @@ impl IotClient {
 
         debug!("Loading service");
 
-        let s = Service::load(&p[0])?;
+        let _s = Service::load(&p[0])?;
+        // TODO: display service info
 
         debug!("Loading IoT data");
 
         if let MaybeEncrypted::Cleartext(b) = p[0].body() {
             let eps = IotService::decode_body(b)?;
-            println!("{}", Descriptor::<Vec<Metadata>>::display(&eps));
+            println!("{}", Descriptor::display(&eps));
 
         } else {
             warn!("Encrypted or missing body, unable to parse endpoints");

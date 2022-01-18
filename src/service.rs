@@ -1,6 +1,5 @@
-use core::convert::TryFrom;
 use core::marker::PhantomData;
-use core::fmt::Debug;
+use core::fmt::{Display, Debug};
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -8,18 +7,12 @@ use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use alloc::vec;
 
-use dsf_core::base::{Body, Parse, Encode, DataBody};
+use dsf_core::base::{Body, Parse, Encode, DataBody, PageBody};
 use dsf_core::options::Metadata;
 use dsf_core::page::Page;
 use dsf_core::types::*;
 
-#[cfg(feature = "dsf-rpc")]
-use dsf_rpc::service::{try_parse_key_value, ServiceInfo};
-
-#[cfg(feature = "dsf-rpc")]
-use dsf_rpc::data::DataInfo;
-
-use crate::endpoint::{self as ep, parse_endpoint_descriptor, StringIsh, MetaIsh, BytesIsh};
+use crate::endpoint::{self as ep};
 use crate::error::IotError;
 
 pub const IOT_APP_ID: u16 = 1;
@@ -28,39 +21,6 @@ pub const IOT_SERVICE_PAGE_KIND: u16 = 1;
 pub const IOT_DATA_PAGE_KIND: u16 = 2;
 
 pub trait EndpointContainer: AsRef<ep::Descriptor> {}
-
-pub trait Idk<Inner>: Debug {
-    type Container: AsRef<[Inner]> + Debug;
-    type String: AsRef<str> + Debug;
-    type Bytes: AsRef<[u8]> + Debug;
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct IdkOwned;
-
-impl <T: Debug> Idk<T> for IdkOwned {
-    type Container = Vec<T>;
-    type String = String;
-    type Bytes = Vec<u8>;
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct IdkRef<'a> (PhantomData<&'a ()>);
-
-impl <'a, T: Debug + 'a> Idk<T> for IdkRef<'a> {
-    type Container = &'a [T];
-    type String = &'a str;
-    type Bytes = &'a [u8];
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct IdkConst<const N: usize>;
-
-impl <T: Debug, const N: usize> Idk<T> for IdkConst<N> {
-    type Container = [T; N];
-    type String = &'static str;
-    type Bytes = [u8; N];
-}
 
 #[derive(Debug, Clone)]
 //#[cfg_attr(feature = "structopt", derive(structopt::StructOpt))]
@@ -79,9 +39,9 @@ pub struct IotService<EPS = Vec<ep::Descriptor>, META = Vec<(String, String)>> {
 }
 
 pub struct Service2<PRI=Vec<u8>, OPT=Vec<()>, DAT=Vec<u8>> {
-    body: PRI,
-    public_options: OPT,
-    private_options: (),
+    _body: PRI,
+    _public_options: OPT,
+    _private_options: (),
     data: PhantomData<DAT>
 }
 
@@ -93,14 +53,18 @@ where
 
 }
 
-pub trait Application<PRI, DAT> {
+pub trait Application {
     const APPLICATION_ID: u16;
 
+    type Info: Debug;
+    type Data: Debug;
 }
 
-impl Application<ep::Descriptor, ep::DataOwned> for dsf_core::service::Service {
+impl Application for dsf_core::service::Service {
     const APPLICATION_ID: u16 = 0x0001;
 
+    type Info = IotInfo;
+    type Data = IotData;
 }
 
 impl <EPS, META> IotService<EPS, META>
@@ -171,24 +135,74 @@ impl IotService {
 }
 
 #[derive(Debug, Clone)]
-pub struct IotData<C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug = Vec<ep::DataOwned>> {
+pub struct IotInfo<C: stor::Stor<Metadata> = stor::Owned, D: AsRef<[ep::Descriptor<C>]> + Debug = Vec<ep::Descriptor<C>>> {
+    pub descriptors: D,
+    _c: PhantomData<C>,
+}
+
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> IotInfo<C, D> {
+    pub fn new(descriptors: D) -> Self {
+        Self{ descriptors, _c: PhantomData }
+    }
+}
+
+/// PageBody marker allows this to be used with [`dsf_core::Service::publish_data`]
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> PageBody for IotInfo<C, D> {}
+
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> Encode for IotInfo<C, D> {
+    type Error = IotError;
+
+    fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
+        let mut index = 0;
+
+        // Encode each endpoint entry
+        for ed in self.descriptors.as_ref() {
+            index += ed.encode(&mut buff[index..])?;
+        }
+
+        Ok(index)
+    }
+}
+
+impl Parse for IotInfo<stor::Owned> {
+    type Output = IotInfo<stor::Owned>;
+
+    type Error = IotError;
+
+    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
+        let mut index = 0;
+        let mut descriptors = vec![];
+
+        // Decode each endpoint entry
+        while index < buff.len() {
+            let (ed, n) = ep::Descriptor::parse(&buff[index..])?;
+
+            descriptors.push(ed);
+            index += n;
+        }
+
+        Ok((IotInfo{descriptors, _c: PhantomData}, index))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IotData<C: stor::Stor<Metadata> = stor::Owned, D: AsRef<[ep::Data<C>]> + Debug = Vec<ep::DataOwned>> {
     /// Measurement values (these must correspond with service endpoints)
     pub data: D,
 
     _c: PhantomData<C>,
 }
 
-impl <C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> IotData<C, D> {
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> IotData<C, D> {
     pub fn new(data: D) -> Self {
         Self{ data, _c: PhantomData }
     }
 }
 
 /// DataBody marker allows this to be used with [`dsf_core::Service::publish_data`]
-impl <C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> DataBody for IotData<C, D> {}
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> DataBody for IotData<C, D> {}
 
-/// All storage types are 
-impl <C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> Encode for IotData<C, D> {
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> Encode for IotData<C, D> {
     type Error = IotError;
 
     fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
@@ -203,8 +217,8 @@ impl <C: Idk<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> Encode for IotData<C, D
     }
 }
 
-impl Parse for IotData<IdkOwned> {
-    type Output = IotData<IdkOwned>;
+impl Parse for IotData<stor::Owned> {
+    type Output = IotData<stor::Owned>;
 
     type Error = IotError;
 

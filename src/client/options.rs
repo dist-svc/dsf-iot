@@ -1,5 +1,4 @@
 use core::convert::TryInto;
-use std::marker::PhantomData;
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -9,7 +8,7 @@ use bytes::BytesMut;
 use structopt::StructOpt;
 
 use dsf_core::base::{MaybeEncrypted, Encode};
-use dsf_core::types::{DataKind, SecretKey};
+use dsf_core::types::{DataKind};
 use dsf_core::options::Options;
 use dsf_core::keys::Keys;
 

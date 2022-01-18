@@ -5,7 +5,7 @@ use dsf_core::wire::Container;
 use log::{debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
-use dsf_core::base::{Parse, Encode, PageBody, DataBody};
+use dsf_core::base::{Parse, DataBody};
 
 use crate::{IOT_APP_ID};
 use crate::endpoint::{Descriptor};
@@ -155,7 +155,7 @@ where
     }
 
     /// Discover local services
-    pub fn discover(&mut self, body: &[u8], opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    pub fn discover(&mut self, _body: &[u8], _opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         todo!()
     }
 
@@ -172,7 +172,7 @@ where
         };
 
         // Publish data to buffer
-        let (n, p) = self.svc.publish_data_buff(page_opts)
+        let (_n, p) = self.svc.publish_data_buff(page_opts)
             .map_err(EngineError::Core)?;
 
         let data = p.raw();
@@ -285,7 +285,7 @@ where
             EngineResponse::Page(p) => {
                 debug!("Sending page to: {:?}", from);
                 if let Some(r) = p.raw() {
-                    self.comms.send(&from, data).map_err(EngineError::Comms)?;
+                    self.comms.send(&from, r).map_err(EngineError::Comms)?;
                 } else {
                     // TODO: encode page here if required (shouldn't really ever occur?)
                     todo!()
@@ -467,14 +467,12 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::convert::Infallible;
 
     use dsf_core::prelude::*;
     use dsf_core::net::Status;
-    use dsf_core::options::Metadata;
     
     use crate::endpoint::{self as ep};
-    use crate::service::{IotService, IotData};
+    use crate::service::{IotData};
 
     use super::*;
 
@@ -493,10 +491,10 @@ mod test {
         s.update(&p.id(), |k| *k = p.keys() );
 
         // Setup descriptors
-        let descriptors: Vec<Descriptor> = vec![
-            (ep::Kind::Temperature, ep::Flags::R).into(),
-            (ep::Kind::Pressure, ep::Flags::R).into(),
-            (ep::Kind::Humidity, ep::Flags::R).into(),
+        let descriptors = vec![
+            ep::Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![]),
+            ep::Descriptor::new(ep::Kind::Pressure, ep::Flags::R, vec![]),
+            ep::Descriptor::new(ep::Kind::Humidity, ep::Flags::R, vec![]),
         ];
 
         // Setup engine with default service
@@ -565,7 +563,6 @@ mod test {
         let resp = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
-        let ex = NetResponse::new(e.svc.id(), 1, NetResponseKind::Status(Status::Ok), Flags::empty());
         assert_eq!(resp, NetResponseKind::Status(Status::Ok).into());
 
         // Check subscriber state
@@ -578,13 +575,12 @@ mod test {
         let from = 1;
 
         // Build net request and execute
-        let ep_filter: &[Descriptor] = &[(ep::Kind::Temperature, ep::Flags::R).into()];
+        let ep_filter: &[Descriptor] = &[ep::Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![])];
         let (body, n) = ep_filter.encode_buff::<128>().unwrap();
         let req = NetRequest::new(p.id(), 1, NetRequestKind::Discover((&body[..n]).to_vec(), vec![]), Flags::empty());
         let resp = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
-        let ex = NetResponse::new(e.svc.id(), 1, NetResponseKind::Status(Status::Ok), Flags::empty());
         assert_eq!(resp, e.store.fetch_page(&e.pri).unwrap().unwrap().into());
     }
 
@@ -619,7 +615,7 @@ mod test {
         assert_eq!(d.0, from);
 
         // Parse out page
-        let b = Container::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
+        let _b = Container::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
 
         // TODO: translate back to IoT data and check
 

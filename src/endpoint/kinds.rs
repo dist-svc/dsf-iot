@@ -1,9 +1,6 @@
 use core::fmt::Write;
 use core::str::FromStr;
 
-#[cfg(feature = "alloc")]
-use crate::alloc::vec::Vec;
-
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
     (1, Kind::Temperature, "temperature",  "°C"     ),

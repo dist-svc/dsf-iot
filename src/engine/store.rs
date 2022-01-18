@@ -1,6 +1,5 @@
 
 use core::fmt::Debug;
-use std::convert::Infallible;
 
 use dsf_core::prelude::*;
 use dsf_core::keys::{Keys, KeySource};

@@ -1,23 +1,12 @@
-extern crate structopt;
-use std::any;
 
-use dsf_core::options::Metadata;
-use dsf_iot::service::{Idk, IdkOwned};
+
 use dsf_rpc::DataInfo;
 use structopt::StructOpt;
 
-extern crate futures;
 use futures::prelude::*;
 
-extern crate async_std;
-use async_std::task;
+use tracing::{debug, info, error};
 
-extern crate humantime;
-
-#[macro_use]
-extern crate tracing;
-
-extern crate tracing_subscriber;
 use tracing_subscriber::filter::{LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
@@ -149,7 +138,7 @@ fn print_service_list(services: &[IotService]) {
     }
 }
 
-fn print_service_data(service: &IotService, data: &[(DataInfo, IotData<IdkOwned>)]) {
+fn print_service_data(service: &IotService, data: &[(DataInfo, IotData<stor::Owned>)]) {
     println!("Service ID: {}", service.id);
     println!("Data: ");
 
