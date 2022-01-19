@@ -9,7 +9,7 @@ edition = "2018"
 client = ["std", "async-std", "serde", "futures", "dsf-rpc", "dsf-client", "chrono-english", "chrono", "tracing", "tracing-subscriber", "humantime", "strum", "strum_macros", "anyhow", "thiserror" ]
 util = [ "client", "structopt", "dsf-core/structopt" ]
 
-std = [ "dsf-core/std", "dsf-rpc", "dsf-client", "thiserror" ]
+std = [ "dsf-core/std", "dsf-rpc", "dsf-client", "thiserror", ]
 alloc = [ "dsf-core/alloc", "pretty-hex/alloc" ]
 
 default = [ "client", "util", "std", "alloc", "dsf-rpc" ]

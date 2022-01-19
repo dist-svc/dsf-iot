@@ -146,8 +146,26 @@ impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> IotInfo<C,
     }
 }
 
+impl <'a, C: stor::Stor<Metadata>> IotInfo<C, &'a [ep::Descriptor<C>]> {
+    pub fn from_slice(descriptors: &'a [ep::Descriptor<C>]) -> Self {
+        Self{ descriptors, _c: PhantomData }
+    }
+}
+
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> From<D> for IotInfo<C, D> {
+    fn from(descriptors: D) -> Self {
+        Self{ descriptors, _c: PhantomData }
+    }
+}
+
 /// PageBody marker allows this to be used with [`dsf_core::Service::publish_data`]
 impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> PageBody for IotInfo<C, D> {}
+
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Default + Debug> Default for IotInfo<C, D> {
+    fn default() -> Self {
+        Self { descriptors: Default::default(), _c: Default::default() }
+    }
+}
 
 impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> Encode for IotInfo<C, D> {
     type Error = IotError;
@@ -195,6 +213,12 @@ pub struct IotData<C: stor::Stor<Metadata> = stor::Owned, D: AsRef<[ep::Data<C>]
 
 impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> IotData<C, D> {
     pub fn new(data: D) -> Self {
+        Self{ data, _c: PhantomData }
+    }
+}
+
+impl <'a, C: stor::Stor<Metadata>> IotData<C, &'a [ep::Data<C>]> {
+    pub fn from_slice(data: &'a [ep::Data<C>]) -> Self {
         Self{ data, _c: PhantomData }
     }
 }

@@ -1,8 +1,8 @@
-use core::fmt::Debug;
+use core::fmt::{Debug};
 use core::convert::TryFrom;
 
 use dsf_core::wire::Container;
-use log::{debug, info, warn, error};
+use log::{trace, debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
 use dsf_core::base::{Parse, DataBody};
@@ -33,20 +33,34 @@ pub struct Engine<'a, C: Comms, D: AsRef<[Descriptor]> = Vec<Descriptor>, S: Sto
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature="thiserror", derive(thiserror::Error))]
 pub enum EngineError<CommsError: Debug, StoreError: Debug> {
+
+    #[cfg_attr(feature="thiserror", error("core: {0:?}"))]
     Core(dsf_core::error::Error),
     
+    #[cfg_attr(feature="thiserror", error("comms: {0:?}"))]
     Comms(CommsError),
 
+    #[cfg_attr(feature="thiserror", error("store: {0:?}"))]
     Store(StoreError),
 
+    #[cfg_attr(feature="thiserror", error("unhandled"))]
     Unhandled,
 
+    #[cfg_attr(feature="thiserror", error("unsupported"))]
     Unsupported,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum EngineEvent {
-
+    None,
+    Discover(Id),
+    SubscribeFrom(Id),
+    UnsubscribeFrom(Id),
+    SubscribedTo(Id),
+    UnsubscribedTo(Id),
+    ReceivedData(Id),
 }
 
 #[derive(Debug, PartialEq)]
@@ -125,7 +139,7 @@ where
         
         let sig = p.signature();
 
-        debug!("Generated new page: {:?} sig: {}", p, sig);
+        trace!("Generated new page: {:?} sig: {}", p, sig);
 
         // TODO: port store from pages to containers
         let page = Page::try_from(p)
@@ -150,13 +164,37 @@ where
         self.svc.id()
     }
 
+    fn next_req_id(&mut self) -> u16 {
+        self.req_id = self.req_id.wrapping_add(1);
+        self.req_id
+    }
+
     pub fn set_handler(&mut self, on_rx: &'a mut dyn FnMut(&Page)) {
         self.on_rx = Some(on_rx);
     }
 
     /// Discover local services
-    pub fn discover(&mut self, _body: &[u8], _opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
-        todo!()
+    pub fn discover(&mut self, body: &[u8], opts: &[Options]) -> Result<u16, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+        debug!("Generating local discovery request");
+
+        // Generate discovery request
+        let req_id = self.next_req_id();
+        let req_body = NetRequestKind::Discover(body.to_vec(), opts.to_vec());
+        let mut req = NetRequest::new(self.id(), req_id, req_body, Flags::PUB_KEY_REQUEST);
+        req.common.public_key = Some(self.svc.public_key());
+
+
+        debug!("Broadcasting discovery request: {:?}", req);
+
+        // Sending discovery request
+        let c = self.svc.encode_request_buff(&req, &Default::default())
+                .map_err(EngineError::Core)?;
+
+        trace!("Container: {:?}", c);
+
+        self.comms.broadcast(c.raw()).map_err(EngineError::Comms)?;
+
+        Ok(req_id)
     }
 
     /// Publish service data
@@ -211,8 +249,7 @@ where
         debug!("Attempting to subscribe to: {} at: {:?}", id, addr);
 
         // Generate request ID and update peer
-        self.req_id = self.req_id.wrapping_add(1);
-        let req_id = self.req_id;
+        let req_id = self.next_req_id();
 
         // Update subscription
         self.store.update_peer(&id, |p| {
@@ -222,12 +259,8 @@ where
 
         // Send subscribe request
         // TODO: how to separate target -service- from target -peer-
-        let req = NetRequest::new(self.svc.id(), req_id, NetRequestKind::Subscribe(id), Flags::empty());
-        // TODO: include peer keys here if available
-        let c = self.svc.encode_request_buff(&req, &Default::default())
-                .map_err(EngineError::Core)?;
-
-        self.comms.send(&addr, c.raw()).map_err(EngineError::Comms)?;
+        let req = NetRequestKind::Subscribe(id);
+        self.request(&addr, req_id, req)?;
 
         debug!("Subscribe TX done (req_id: {})", req_id);
 
@@ -246,8 +279,25 @@ where
         todo!()
     }
 
+    /// Send a request
+    fn request(&mut self, addr: &A, req_id: u16, data: NetRequestKind) -> Result<(), EngineError<<C as Comms>::Error, <S as    Store>::Error>> {
+        let mut flags = Flags::empty();
+
+        // TODO: set pub_key request flag for unknown peers
+
+        let req = NetRequest::new(self.svc.id(), req_id, data, flags);
+
+        // TODO: include peer keys here if available
+        let c = self.svc.encode_request_buff(&req, &Default::default())
+                .map_err(EngineError::Core)?;
+
+        self.comms.send(&addr, c.raw()).map_err(EngineError::Comms)?;
+
+        Ok(())
+    }
+
     /// Handle received data
-    pub fn handle(&mut self, from: A, data: &[u8]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    pub fn handle(&mut self, from: A, data: &[u8]) -> Result<EngineEvent, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         debug!("Received {} bytes from {:?}", data.len(), from);
 
         // Parse base object
@@ -259,8 +309,10 @@ where
             }
         };
 
+        let req_id = base.header().index();
+
         // Convert and handle messages
-        let resp = match (NetMessage::convert(base.clone(), &self.store), Page::try_from(base)) {
+        let (resp, evt) = match (NetMessage::convert(base.clone(), &self.store), Page::try_from(base)) {
             (Ok(NetMessage::Request(req)), _) => self.handle_req(&from, req)?,
             (Ok(NetMessage::Response(resp)), _) => self.handle_resp(&from, resp)?,
             (_, Ok(p)) => self.handle_page(&from, p)?,
@@ -273,8 +325,8 @@ where
         // Send responses
         match resp {
             EngineResponse::Net(net) => {
-                self.req_id = self.req_id.wrapping_add(1);
-                let r = NetResponse::new(self.svc.id(), self.req_id, net, Flags::empty());
+                debug!("Sending response {:?} (id: {}) to: {:?}", net, req_id, from);
+                let r = NetResponse::new(self.svc.id(), req_id, net, Default::default());
 
                 // TODO: pass peer keys here
                 let c = self.svc.encode_response_buff(&r, &Default::default())
@@ -283,7 +335,7 @@ where
                 self.comms.send(&from, c.raw()).map_err(EngineError::Comms)?;
             },
             EngineResponse::Page(p) => {
-                debug!("Sending page to: {:?}", from);
+                debug!("Sending page {:?} to: {:?}", p, from);
                 if let Some(r) = p.raw() {
                     self.comms.send(&from, r).map_err(EngineError::Comms)?;
                 } else {
@@ -294,15 +346,25 @@ where
             EngineResponse::None => (),
         }
 
-        Ok(())
+        Ok(evt)
     }
 
 
 
-    fn handle_req(&mut self, from: &A, req: NetRequest) -> Result<EngineResponse, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    fn handle_req(&mut self, from: &A, req: NetRequest) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         use NetRequestKind::*;
 
         debug!("Received request: {:?} from: {} ({:?})", req, req.common.from, from);
+
+        if let Some(pub_key) = req.common.public_key {
+            debug!("Update peer: {:?}", from);
+            self.store.update_peer(&req.common.from, |p| {
+                p.keys.pub_key = Some(pub_key.clone());
+                p.addr = Some(from.clone());
+            }).map_err(EngineError::Store)?;
+        }
+
+        let mut evt = EngineEvent::None;
 
         // Handle request messages
         let resp: EngineResponse = match &req.data {
@@ -360,6 +422,8 @@ where
                     p.addr = Some(from.clone());
                 }).map_err(EngineError::Store)?;
 
+                evt = EngineEvent::SubscribeFrom(req.common.from.clone());
+
                 NetResponseKind::Status(Status::Ok).into()
             },
             Unsubscribe(id) if id == &self.svc.id() => {
@@ -368,6 +432,8 @@ where
                 self.store.update_peer(&req.common.from, |p| {
                     p.subscriber = false;
                 }).map_err(EngineError::Store)?;
+
+                evt = EngineEvent::UnsubscribeFrom(req.common.from.clone());
 
                 NetResponseKind::Status(Status::Ok).into()
             },
@@ -378,15 +444,16 @@ where
             _ => NetResponseKind::Status(Status::InvalidRequest).into()
         };
 
-        Ok(resp)
+        Ok((resp, evt))
     }
 
-    fn handle_resp(&mut self, from: &A, resp: NetResponse) -> Result<EngineResponse, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    fn handle_resp(&mut self, from: &A, resp: NetResponse) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         //use NetResponseKind::*;
 
         debug!("Received response: {:?} from: {:?}", resp, from);
 
         let req_id = resp.common.id;
+        let mut evt = EngineEvent::None;
 
         // Find matching peer for response
         let peer = match self.store.get_peer(&resp.common.from).map_err(EngineError::Store)? {
@@ -403,9 +470,12 @@ where
                 if *st == Status::Ok {
                     info!("Subscribe ok for {} ({:?})", resp.common.from, from);
 
-                    self.store.update_peer(&resp.common.from, |p| {
+                    let p = self.store.update_peer(&resp.common.from, |p| {
                         p.subscribed = SubscribeState::Subscribed;
-                    }).map_err(EngineError::Store)?
+                    }).map_err(EngineError::Store)?;
+                    
+                    evt = EngineEvent::SubscribedTo(resp.common.from.clone());
+                    p
 
                 } else {
                     info!("Subscribe failed for {} ({:?})", resp.common.from, from);
@@ -417,9 +487,12 @@ where
                 if *st == Status::Ok {
                     info!("Unsubscribe ok for {} ({:?})", resp.common.from, from);
 
-                    self.store.update_peer(&resp.common.from, |p| {
+                    let p = self.store.update_peer(&resp.common.from, |p| {
                         p.subscribed = SubscribeState::None;
-                    }).map_err(EngineError::Store)?
+                    }).map_err(EngineError::Store)?;
+
+                    evt = EngineEvent::UnsubscribedTo(resp.common.from.clone());
+                    p
 
                 } else {
                     info!("Unsubscribe failed for {} ({:?})", resp.common.from, from);
@@ -429,30 +502,45 @@ where
             // TODO: what other responses are important?
             //NoResult => (),
             //PullData(_, _) => (),
+            (_, NetResponseKind::Status(status)) => {
+                debug!("Received status: {:?} for peer: {:?}", status, peer);
+            }
             _ => todo!(),
         };
 
 
-        Ok(EngineResponse::None)
+        Ok((EngineResponse::None, evt))
     }
 
-    fn handle_page(&mut self, from: &A, p: Page) -> Result<EngineResponse, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    fn handle_page(&mut self, from: &A, p: Page) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         debug!("Received page: {:?} from: {:?}", p, from);
+
+        let mut evt = EngineEvent::None;
 
         // Find matching peer for rx'd page
         let peer = match self.store.get_peer(p.id()).map_err(EngineError::Store)? {
             Some(p) => p,
             None => {
-                error!("no peer for id: {}", p.id());
-                return Ok(NetResponseKind::Status(Status::InvalidRequest).into());
+                warn!("No peer for page from id: {}", p.id());
+
+                self.store.update_peer(p.id(), |peer| {
+                    if let PageInfo::Primary(pri) = p.info() {
+                        peer.keys.pub_key = Some(pri.pub_key.clone());
+                    }
+                }).map_err(EngineError::Store)?;
+
+                return Ok((NetResponseKind::Status(Status::Ok).into(), evt));
             },
         };
 
         // Check for subscription
         if !peer.subscribed() {
             warn!("Not subscribed to peer: {}", p.id());
-            return Ok(NetResponseKind::Status(Status::InvalidRequest).into());
+            return Ok((NetResponseKind::Status(Status::InvalidRequest).into(), evt));
         }
+
+        // Emit rx event
+        evt = EngineEvent::ReceivedData(p.id().clone());
 
         // Call receive handler
         if let Some(on_rx) = self.on_rx.as_mut() {
@@ -460,7 +548,7 @@ where
         }
 
         // Respond with OK
-        Ok(NetResponseKind::Status(Status::Ok).into())
+        Ok((NetResponseKind::Status(Status::Ok).into(), evt))
     }
 }
 
@@ -468,9 +556,11 @@ where
 #[cfg(test)]
 mod test {
 
-    use dsf_core::prelude::*;
+    //use dsf_core::prelude::*;
     use dsf_core::net::Status;
+    use dsf_core::options::Metadata;
     
+    use crate::prelude::*;
     use crate::endpoint::{self as ep};
     use crate::service::{IotData};
 
@@ -492,9 +582,9 @@ mod test {
 
         // Setup descriptors
         let descriptors = vec![
-            ep::Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![]),
-            ep::Descriptor::new(ep::Kind::Pressure, ep::Flags::R, vec![]),
-            ep::Descriptor::new(ep::Kind::Humidity, ep::Flags::R, vec![]),
+            Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![]),
+            Descriptor::new(ep::Kind::Pressure, ep::Flags::R, vec![]),
+            Descriptor::new(ep::Kind::Humidity, ep::Flags::R, vec![]),
         ];
 
         // Setup engine with default service
@@ -521,10 +611,10 @@ mod test {
 
         for t in &tests {
             // Generate full request object
-            let req = NetRequest::new(p.id(), 1, t.0.clone(), Flags::empty());
+            let req = NetRequest::new(p.id(), 1, t.0.clone(), Default::default());
 
             // Pass to engine
-            let resp = e.handle_req(&from, req.clone())
+            let (resp, _evt) = e.handle_req(&from, req.clone())
                 .expect("Failed to handle message");
 
             // Check response
@@ -539,8 +629,8 @@ mod test {
         let from = 1;
 
         // Build subscribe request and execute
-        let req = NetRequest::new(p.id(), 1, NetRequestKind::Subscribe(e.svc.id()), Flags::empty());
-        let resp = e.handle_req(&from, req).expect("Failed to handle message");
+        let req = NetRequest::new(p.id(), 1, NetRequestKind::Subscribe(e.svc.id()), Default::default());
+        let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
         assert_eq!(resp, NetResponseKind::Status(Status::Ok).into());
@@ -559,8 +649,8 @@ mod test {
         e.store.update_peer(&p.id(), |p| p.subscriber = true ).unwrap();
 
         // Build subscribe request and execute
-        let req = NetRequest::new(p.id(), 1, NetRequestKind::Unsubscribe(e.svc.id()), Flags::empty());
-        let resp = e.handle_req(&from, req).expect("Failed to handle message");
+        let req = NetRequest::new(p.id(), 1, NetRequestKind::Unsubscribe(e.svc.id()), Default::default());
+        let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
         assert_eq!(resp, NetResponseKind::Status(Status::Ok).into());
@@ -575,10 +665,10 @@ mod test {
         let from = 1;
 
         // Build net request and execute
-        let ep_filter: &[Descriptor] = &[ep::Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![])];
+        let ep_filter: &[Descriptor] = &[Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![])];
         let (body, n) = ep_filter.encode_buff::<128>().unwrap();
-        let req = NetRequest::new(p.id(), 1, NetRequestKind::Discover((&body[..n]).to_vec(), vec![]), Flags::empty());
-        let resp = e.handle_req(&from, req).expect("Failed to handle message");
+        let req = NetRequest::new(p.id(), 1, NetRequestKind::Discover((&body[..n]).to_vec(), vec![]), Default::default());
+        let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
         assert_eq!(resp, e.store.fetch_page(&e.pri).unwrap().unwrap().into());
@@ -597,10 +687,10 @@ mod test {
         }).unwrap();
 
         // Build object for publishing
-        let endpoint_data = IotData::new([
-            ep::DataRef::new(27.3.into(), &[]),
-            ep::DataRef::new(1016.2.into(), &[]),
-            ep::DataRef::new(59.6.into(), &[]),
+        let endpoint_data = IotData::<stor::Const<0>, _>::new([
+            EpData::new(27.3.into(), []),
+            EpData::new(1016.2.into(), []),
+            EpData::new(59.6.into(), []),
         ]);
 
         let mut data_buff = [0u8; 128];
@@ -648,7 +738,7 @@ mod test {
         let m = NetMessage::convert(b, &e.store).expect("Failed to convert message");
 
         let expected = NetRequest::new(e.svc.id(), e.req_id, 
-                NetRequestKind::Subscribe(p.id()), Flags::empty());
+                NetRequestKind::Subscribe(p.id()), Default::default());
 
         assert_eq!( m, NetMessage::Request(expected), "Request mismatch");
 
@@ -659,7 +749,7 @@ mod test {
 
         let sp = Page::try_from(sp).unwrap();
 
-        let resp = NetResponse::new(p.id(), e.req_id, NetResponseKind::Status(Status::Ok), Flags::empty());
+        let resp = NetResponse::new(p.id(), e.req_id, NetResponseKind::Status(Status::Ok), Default::default());
         e.handle_resp(&from, resp).expect("Response handling failed");
 
         // Check peer state is now subscribed

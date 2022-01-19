@@ -70,9 +70,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let s = c
                 .create(CreateOptions {
                     endpoints: vec![
-                        (Kind::Temperature, Flags::R, vec![]).into(),
-                        (Kind::Pressure, Flags::R, vec![]).into(),
-                        (Kind::Humidity, Flags::R, vec![]).into(),
+                        Descriptor::new(Kind::Temperature, Flags::R, vec![]),
+                        Descriptor::new(Kind::Pressure, Flags::R, vec![]),
+                        Descriptor::new(Kind::Humidity, Flags::R, vec![]),
                     ],
                     ..Default::default()
                 })

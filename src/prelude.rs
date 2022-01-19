@@ -1,4 +1,4 @@
-pub use crate::endpoint::{Descriptor, Data, DataRef, DataOwned, Kind, Flags as Flags};
+pub use crate::endpoint::{Descriptor as EpDescriptor, Data as EpData, Kind as EpKind, Flags as EpFlags};
 
 pub use crate::service::{IotData, IotService};
 

@@ -1,9 +1,11 @@
 
 use core::fmt::Debug;
 
-use crate::prelude::Descriptor;
+use log::debug;
 
-use super::{Engine, Store, EngineError};
+use crate::prelude::EpDescriptor;
+
+use super::{Engine, Store, EngineError, EngineEvent};
 
 
 pub trait Comms {
@@ -26,9 +28,11 @@ pub trait Comms {
 
 
 #[cfg(feature="std")]
-impl <S: Store<Address=std::net::SocketAddr>, D: AsRef<[Descriptor]>> Engine<'_, std::net::UdpSocket, D, S> {
+impl <S: Store<Address=std::net::SocketAddr>, D: AsRef<[EpDescriptor]>> Engine<'_, std::net::UdpSocket, D, S> {
     /// Create a new UDP engine instance
-    pub fn udp<A: std::net::ToSocketAddrs>(descriptors: D, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
+    pub fn udp<A: std::net::ToSocketAddrs + Debug>(descriptors: D, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
+        debug!("Connecting to socket: {:?}", addr);
+
         // Attempt to bind UDP socket
         let comms = std::net::UdpSocket::bind(addr).map_err(EngineError::Comms)?;
 
@@ -41,17 +45,25 @@ impl <S: Store<Address=std::net::SocketAddr>, D: AsRef<[Descriptor]>> Engine<'_,
     }
 
     // Tick function to update engine
-    pub fn tick(&mut self) -> Result<(), EngineError<std::io::Error, <S as Store>::Error>> {
+    pub fn tick(&mut self) -> Result<EngineEvent, EngineError<std::io::Error, <S as Store>::Error>> {
         let mut buff = [0u8; 512];
+
+        let mut evt = EngineEvent::None;
 
         // Check for and handle received messages
         if let Some((n, a)) = Comms::recv(&mut self.comms, &mut buff).map_err(EngineError::Comms)? {
-            self.handle(a, &buff[..n])?;
+            debug!("Received {} bytes from {:?}", n, a);
+            evt = self.handle(a, &buff[..n])?;
         }
 
         // TODO: anything else?
 
-        Ok(())
+        Ok(evt)
+    }
+
+    pub fn addr(&mut self) -> Result<std::net::SocketAddr, EngineError<std::io::Error, <S as Store>::Error>>{
+        let a = self.comms.local_addr().map_err(EngineError::Comms)?;
+        Ok(a)
     }
 }
 
@@ -74,8 +86,22 @@ impl Comms for std::net::UdpSocket {
         Ok(())
     }
 
-    fn broadcast(&mut self, _data: &[u8]) -> Result<(), Self::Error> {
-        todo!("Work out how to derive broadcast address")
+    fn broadcast(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        use std::net::{SocketAddr, Ipv4Addr};
+        
+        let a = match self.local_addr()? {
+            SocketAddr::V4(mut v4) => {
+                v4.set_ip(Ipv4Addr::new(127, 0, 0, 2));
+                v4
+            },
+            _ => unimplemented!(),
+        };
+
+        debug!("Broadcast {} bytes to: {}", data.len(), a);
+
+        self.send_to(data, a)?;
+
+        Ok(())
     }
 }
 

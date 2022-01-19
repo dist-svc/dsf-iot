@@ -55,9 +55,9 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Setup service
     let descriptors = [
-        (Kind::Temperature, Flags::R, vec![]).into(),
-        (Kind::Pressure, Flags::R, vec![]).into(),
-        (Kind::Humidity, Flags::R, vec![]).into(),
+        Descriptor::new(Kind::Temperature, Flags::R, vec![]),
+        Descriptor::new(Kind::Pressure, Flags::R, vec![]),
+        Descriptor::new(Kind::Humidity, Flags::R, vec![]),
     ];
 
     // TODO: split service and engine setup better

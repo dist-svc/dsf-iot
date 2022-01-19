@@ -19,7 +19,7 @@ pub use dsf_rpc::ServiceIdentifier;
 use rpc::{FetchOptions, DataInfo};
 
 use crate::error::IotError;
-use crate::prelude::Descriptor;
+use crate::prelude::EpDescriptor;
 use crate::service::*;
 
 pub mod options;
@@ -308,7 +308,7 @@ impl IotClient {
 
         if let MaybeEncrypted::Cleartext(b) = p[0].body() {
             let eps = IotService::decode_body(b)?;
-            println!("{}", Descriptor::display(&eps));
+            println!("{}", EpDescriptor::display(&eps));
 
         } else {
             warn!("Encrypted or missing body, unable to parse endpoints");
