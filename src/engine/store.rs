@@ -3,6 +3,8 @@ use core::fmt::Debug;
 
 use dsf_core::prelude::*;
 use dsf_core::keys::{Keys, KeySource};
+use dsf_core::types::ImmutableData;
+use dsf_core::wire::Container;
 
 bitflags::bitflags! {
     pub struct StoreFlags: u16 {
@@ -45,17 +47,17 @@ pub trait Store: KeySource {
     fn get_peer(&self, id: &Id) -> Result<Option<Peer<Self::Address>>, Self::Error>;
 
     // Update a specified peer
-    fn update_peer<F: Fn(&mut Peer<Self::Address>)-> ()>(&mut self, id: &Id, f: F) -> Result<(), Self::Error>;
+    fn update_peer<R: Debug, F: Fn(&mut Peer<Self::Address>)-> R>(&mut self, id: &Id, f: F) -> Result<R, Self::Error>;
 
     // Iterate through known peers
     fn peers<'a>(&'a self) -> Self::Iter<'a>;
 
 
     // Store a page
-    fn store_page(&mut self, sig: &Signature, p: &Page) -> Result<(), Self::Error>;
+    fn store_page<T: ImmutableData>(&mut self, sig: &Signature, p: &Container<T>) -> Result<(), Self::Error>;
 
     // Fetch a stored page
-    fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Page>, Self::Error>;
+    fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error>;
 }
 
 #[derive(Debug, Clone)]
@@ -103,7 +105,7 @@ pub struct MemoryStore<Addr: Clone + Debug = std::net::SocketAddr> {
     pub(crate) our_keys: Option<Keys>,
     pub(crate) last_sig: Option<Signature>,
     pub(crate) peers: std::collections::HashMap<Id, Peer<Addr>>,
-    pub(crate) pages: std::collections::HashMap<Signature, Page>
+    pub(crate) pages: std::collections::HashMap<Signature, Container>
 }
 
 impl <Addr: Clone + Debug> MemoryStore<Addr> {
@@ -151,18 +153,17 @@ impl <Addr: Clone + Debug + 'static> Store for MemoryStore<Addr> {
         self.peers.iter()
     }
 
-    fn update_peer<F: Fn(&mut Peer<Self::Address>)-> ()>(&mut self, id: &Id, f: F) -> Result<(), Self::Error> {
+    fn update_peer<R: Debug, F: Fn(&mut Peer<Self::Address>)-> R>(&mut self, id: &Id, f: F) -> Result<R, Self::Error> {
         let p = self.peers.entry(id.clone()).or_default();
-        f(p);
+        Ok(f(p))
+    }
+
+    fn store_page<T: ImmutableData>(&mut self, sig: &Signature, p: &Container<T>) -> Result<(), Self::Error> {
+        self.pages.insert(sig.clone(), p.to_owned());
         Ok(())
     }
 
-    fn store_page(&mut self, sig: &Signature, p: &Page) -> Result<(), Self::Error> {
-        self.pages.insert(sig.clone(), p.clone());
-        Ok(())
-    }
-
-    fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Page>, Self::Error> {
+    fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error> {
         let p = self.pages.get(sig).map(|p| p.clone() );
         Ok(p)
     }

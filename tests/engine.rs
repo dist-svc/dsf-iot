@@ -9,6 +9,13 @@ use dsf_iot::engine::{Engine, MemoryStore, EngineEvent};
 
 type E = Engine<'static, UdpSocket, Vec<EpDescriptor>, MemoryStore, 512>;
 
+use ctor::ctor;
+
+#[ctor]
+fn init_color_backtrace() {
+    color_backtrace::install();
+}
+
 fn new_engine(addr: &str, descriptors: Vec<EpDescriptor>) -> anyhow::Result<E> {
     
     // Create peer for sending requests

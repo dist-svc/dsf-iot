@@ -1,6 +1,7 @@
 use core::fmt::{Debug};
 use core::convert::TryFrom;
 
+use dsf_core::types::ImmutableData;
 use dsf_core::wire::Container;
 use log::{trace, debug, info, warn, error};
 
@@ -29,7 +30,7 @@ pub struct Engine<'a, C: Comms, D: AsRef<[Descriptor]> = Vec<Descriptor>, S: Sto
     comms: C,
     store: S,
 
-    on_rx: Option<&'a mut dyn FnMut(&Page)>,
+    on_rx: Option<&'a mut dyn FnMut(&Container)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,7 +68,7 @@ pub enum EngineEvent {
 enum EngineResponse {
     None,
     Net(NetResponseKind),
-    Page(Page),
+    Page(Container),
 }
 
 impl From<NetResponseKind> for EngineResponse {
@@ -76,8 +77,8 @@ impl From<NetResponseKind> for EngineResponse {
     }
 }
 
-impl From<Page> for EngineResponse {
-    fn from(p: Page) -> Self {
+impl From<Container> for EngineResponse {
+    fn from(p: Container) -> Self {
         Self::Page(p)
     }
 }
@@ -141,17 +142,13 @@ where
 
         trace!("Generated new page: {:?} sig: {}", p, sig);
 
-        // TODO: port store from pages to containers
-        let page = Page::try_from(p)
-            .map_err(EngineError::Core)?;
-
         // Update last signature in store
         store.set_last_sig(&sig)
             .map_err(EngineError::Store)?;
 
 
         // Store page if possible
-        store.store_page(&sig, &page)
+        store.store_page(&sig, &p)
             .map_err(EngineError::Store)?;
 
         // TODO: setup forward to subscribers?
@@ -169,7 +166,7 @@ where
         self.req_id
     }
 
-    pub fn set_handler(&mut self, on_rx: &'a mut dyn FnMut(&Page)) {
+    pub fn set_handler(&mut self, on_rx: &'a mut dyn FnMut(&Container)) {
         self.on_rx = Some(on_rx);
     }
 
@@ -216,16 +213,14 @@ where
         let data = p.raw();
         let sig = p.signature();
 
-        // TODO: swap store from page to container
-        let page = Page::try_from(p.clone())
-            .map_err(EngineError::Core)?;
+        debug!("Publishing object: {:02x?}", p);
 
         // Update last sig
         self.store.set_last_sig(&sig)
             .map_err(EngineError::Store)?;
 
         // Write to store
-        self.store.store_page(&sig, &page)
+        self.store.store_page(&sig, &p)
             .map_err(EngineError::Store)?;
 
         // Send updated page to subscribers
@@ -309,13 +304,16 @@ where
             }
         };
 
+        debug!("Received object: {:02x?}", base);
+
         let req_id = base.header().index();
 
         // Convert and handle messages
-        let (resp, evt) = match (NetMessage::convert(base.clone(), &self.store), Page::try_from(base)) {
-            (Ok(NetMessage::Request(req)), _) => self.handle_req(&from, req)?,
-            (Ok(NetMessage::Response(resp)), _) => self.handle_resp(&from, resp)?,
-            (_, Ok(p)) => self.handle_page(&from, p)?,
+        let (resp, evt) = match NetMessage::convert(base.clone(), &self.store) {
+            Ok(NetMessage::Request(req)) => self.handle_req(&from, req)?,
+            Ok(NetMessage::Response(resp)) => self.handle_resp(&from, resp)?,
+            _ if base.header().kind().is_page() => self.handle_page(&from, base)?,
+            _ if base.header().kind().is_data() => self.handle_page(&from, base)?,
             _ => {
                 error!("Unhandled object type");
                 return Err(EngineError::Unhandled)
@@ -336,12 +334,8 @@ where
             },
             EngineResponse::Page(p) => {
                 debug!("Sending page {:?} to: {:?}", p, from);
-                if let Some(r) = p.raw() {
-                    self.comms.send(&from, r).map_err(EngineError::Comms)?;
-                } else {
-                    // TODO: encode page here if required (shouldn't really ever occur?)
-                    todo!()
-                }
+                // TODO: ensure page is valid prior to sending?
+                self.comms.send(&from, p.raw()).map_err(EngineError::Comms)?;
             },
             EngineResponse::None => (),
         }
@@ -512,19 +506,19 @@ where
         Ok((EngineResponse::None, evt))
     }
 
-    fn handle_page(&mut self, from: &A, p: Page) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    fn handle_page<T: ImmutableData>(&mut self, from: &A, p: Container<T>) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         debug!("Received page: {:?} from: {:?}", p, from);
 
         let mut evt = EngineEvent::None;
 
         // Find matching peer for rx'd page
-        let peer = match self.store.get_peer(p.id()).map_err(EngineError::Store)? {
+        let peer = match self.store.get_peer(&p.id()).map_err(EngineError::Store)? {
             Some(p) => p,
             None => {
                 warn!("No peer for page from id: {}", p.id());
 
-                self.store.update_peer(p.id(), |peer| {
-                    if let PageInfo::Primary(pri) = p.info() {
+                self.store.update_peer(&p.id(), |peer| {
+                    if let Ok(PageInfo::Primary(pri)) = p.info() {
                         peer.keys.pub_key = Some(pri.pub_key.clone());
                     }
                 }).map_err(EngineError::Store)?;
@@ -544,7 +538,7 @@ where
 
         // Call receive handler
         if let Some(on_rx) = self.on_rx.as_mut() {
-            (on_rx)(&p);
+            (on_rx)(&p.to_owned());
         }
 
         // Respond with OK
@@ -747,8 +741,6 @@ mod test {
         let mut buff = [0u8; 512];
         let (_n, sp) = p.publish_primary(Default::default(), &mut buff).unwrap();
 
-        let sp = Page::try_from(sp).unwrap();
-
         let resp = NetResponse::new(p.id(), e.req_id, NetResponseKind::Status(Status::Ok), Default::default());
         e.handle_resp(&from, resp).expect("Response handling failed");
 
@@ -758,11 +750,11 @@ mod test {
 
         // Test receiving data
         let mut new_page = None;
-        let mut h = |page: &Page| new_page = Some(page.clone()) ;
+        let mut h = |page: &Container| new_page = Some(page.clone()) ;
         e.set_handler(&mut h);
 
-        e.handle_page(&from, sp.clone()).expect("Failed to handle page");
-        assert_eq!(Some(sp), new_page);
+        e.handle_page(&from, sp.to_owned()).expect("Failed to handle page");
+        assert_eq!(Some(sp.to_owned()), new_page);
     }
 
 

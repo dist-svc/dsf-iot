@@ -9,8 +9,8 @@ use alloc::vec;
 
 use dsf_core::base::{Body, Parse, Encode, DataBody, PageBody};
 use dsf_core::options::Metadata;
-use dsf_core::page::Page;
 use dsf_core::types::*;
+use dsf_core::wire::Container;
 
 use crate::endpoint::{self as ep};
 use crate::error::IotError;
@@ -81,21 +81,21 @@ where
 }
 
 impl IotService {
-    pub fn decode_page(mut p: Page, secret_key: Option<&SecretKey>) -> Result<IotService, IotError> {
+    pub fn decode_page(mut p: Container, secret_key: Option<&SecretKey>) -> Result<IotService, IotError> {
 
         if let Some(sk) = secret_key {
             p.decrypt(sk)?;
         }
 
-        let endpoints = match &p.body {
-            Body::Cleartext(b) => IotService::decode_body(&b)?,
-            Body::Encrypted(_e) => return Err(IotError::NoSecretKey),
-            Body::None => return Err(IotError::NoBody),
+        // TODO: refactor this out in a useful way
+        let endpoints = match p.encrypted() {
+            true => return Err(IotError::NoSecretKey),
+            false => IotService::decode_body(&p.body_raw())?,
         };
 
         // TODO: pass through metadata
         let s = IotService {
-            id: p.id,
+            id: p.id(),
             secret_key: secret_key.map(|sk| sk.clone() ),
             endpoints,
             meta: vec![],

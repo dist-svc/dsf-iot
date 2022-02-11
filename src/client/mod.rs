@@ -1,6 +1,7 @@
 use core::convert::{TryInto};
 
 use dsf_core::options::Metadata;
+use dsf_core::wire::Container;
 use futures::prelude::*;
 use log::{debug, info, warn};
 
@@ -295,7 +296,7 @@ impl IotClient {
         let buff = std::fs::read(&opts.file)?;
 
         debug!("Decoding page (keys: {:?})", opts.keys);
-        let p = Page::decode_pages(&buff, &opts.keys)?;
+        let p = Container::decode_pages(&buff, &opts.keys)?;
 
         info!("Decoded pages: {:?}", p);
 
@@ -306,12 +307,14 @@ impl IotClient {
 
         debug!("Loading IoT data");
 
-        if let MaybeEncrypted::Cleartext(b) = p[0].body() {
-            let eps = IotService::decode_body(b)?;
-            println!("{}", EpDescriptor::display(&eps));
-
-        } else {
-            warn!("Encrypted or missing body, unable to parse endpoints");
+        match p[0].encrypted() {
+            false => {
+                let eps = IotService::decode_body(p[0].body_raw())?;
+                println!("{}", EpDescriptor::display(&eps));
+            },
+            true => {
+                warn!("Encrypted page body, unable to parse endpoints");
+            }
         }
 
         Ok(())

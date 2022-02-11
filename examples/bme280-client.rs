@@ -70,9 +70,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let s = c
                 .create(CreateOptions {
                     endpoints: vec![
-                        Descriptor::new(Kind::Temperature, Flags::R, vec![]),
-                        Descriptor::new(Kind::Pressure, Flags::R, vec![]),
-                        Descriptor::new(Kind::Humidity, Flags::R, vec![]),
+                        EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![]),
+                        EpDescriptor::new(EpKind::Pressure, EpFlags::R, vec![]),
+                        EpDescriptor::new(EpKind::Humidity, EpFlags::R, vec![]),
                     ],
                     ..Default::default()
                 })
@@ -103,9 +103,9 @@ async fn main() -> Result<(), anyhow::Error> {
         let m = bme280.measure().unwrap();
 
         let data = vec![
-            Data::new(m.temperature.into(), vec![]),
-            Data::new((m.pressure / 1000.0).into(), vec![]),
-            Data::new(m.humidity.into(), vec![]),
+            EpData::new(m.temperature.into(), vec![]),
+            EpData::new((m.pressure / 1000.0).into(), vec![]),
+            EpData::new(m.humidity.into(), vec![]),
         ];
 
         println!("Measurement: {:?}", data);
