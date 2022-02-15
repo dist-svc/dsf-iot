@@ -53,20 +53,6 @@ where
 
 }
 
-pub trait Application {
-    const APPLICATION_ID: u16;
-
-    type Info: Debug;
-    type Data: Debug;
-}
-
-impl Application for dsf_core::service::Service {
-    const APPLICATION_ID: u16 = 0x0001;
-
-    type Info = IotInfo;
-    type Data = IotData;
-}
-
 impl <EPS, META> IotService<EPS, META>
 where
     EPS: AsRef<ep::Descriptor>,
@@ -161,6 +147,17 @@ impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> From<D> fo
 /// PageBody marker allows this to be used with [`dsf_core::Service::publish_data`]
 impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> PageBody for IotInfo<C, D> {}
 
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> core::fmt::Display for IotInfo<C, D> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let d = self.descriptors.as_ref();
+        for i in 0..d.len() {
+            let e = &d[i];
+            writeln!(f, "  - {:2}: {:16} in {:4} (metadata: {:?})", i, e.kind, e.kind.unit(), e.meta)?;
+        }
+        Ok(())
+    }
+}
+
 impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Default + Debug> Default for IotInfo<C, D> {
     fn default() -> Self {
         Self { descriptors: Default::default(), _c: Default::default() }
@@ -225,6 +222,17 @@ impl <'a, C: stor::Stor<Metadata>> IotData<C, &'a [ep::Data<C>]> {
 
 /// DataBody marker allows this to be used with [`dsf_core::Service::publish_data`]
 impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> DataBody for IotData<C, D> {}
+
+impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> core::fmt::Display for IotData<C, D> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let d = self.data.as_ref();
+        for i in 0..d.len() {
+            let e = &d[i];
+            writeln!(f, "  - {:2}: {:4} (metadata: {:?})", i, e.value, e.meta)?;
+        }
+        Ok(())
+    }
+}
 
 impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> Encode for IotData<C, D> {
     type Error = IotError;

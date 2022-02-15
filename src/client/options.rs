@@ -8,7 +8,7 @@ use bytes::BytesMut;
 use structopt::StructOpt;
 
 use dsf_core::base::{MaybeEncrypted, Encode};
-use dsf_core::types::{DataKind};
+use dsf_core::types::{DataKind, PageKind};
 use dsf_core::options::Options;
 use dsf_core::keys::Keys;
 
@@ -96,7 +96,7 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
 
         let co = dsf_rpc::CreateOptions {
             application_id: IOT_APP_ID,
-            page_kind: Some(IOT_SERVICE_PAGE_KIND),
+            page_kind: Some(PageKind::Generic),
             body: Some(MaybeEncrypted::Cleartext((&body[..n]).to_vec())),
             metadata: self.meta.clone(),
             public: self.public,

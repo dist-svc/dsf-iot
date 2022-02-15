@@ -20,5 +20,14 @@ pub mod engine;
 
 pub const IOT_APP_ID: u16 = 1;
 
-pub const IOT_SERVICE_PAGE_KIND: u16 = 1;
-pub const IOT_DATA_PAGE_KIND: u16 = 2;
+use dsf_core::api::Application;
+
+pub struct IoT;
+
+
+impl Application for IoT {
+    const APPLICATION_ID: u16 = IOT_APP_ID;
+
+    type Info = service::IotInfo;
+    type Data = service::IotData;
+}
