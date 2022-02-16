@@ -1,8 +1,7 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-use core::fmt::Debug;
-use std::fmt::Display;
+use core::fmt::{Debug};
 
 use log::{error, trace, warn};
 

@@ -114,16 +114,17 @@ where
         sb = sb.application_id(IOT_APP_ID);
 
         // Attempt to load existing keys
-        if let Some(k) = store.get_ident() {
+        if let Some(k) = store.get_ident().map_err(EngineError::Store)? {
             debug!("Using existing keys: {:?}", k);
             sb = sb.keys(k);
         }
 
         // Attempt to load last sig for continuation
         // TODO: should this fetch the index too?
-        if let Some(s) = store.get_last_sig() {
-            debug!("Using last sig: {}", s);
-            sb = sb.last_signature(s);
+        if let Some(s) = store.get_last().map_err(EngineError::Store)? {
+            debug!("Using last info: {:?}", s);
+            sb = sb.last_signature(s.sig);
+            sb = sb.last_page(s.page_index);
         }
 
         // TODO: fetch existing page if available?
@@ -143,7 +144,8 @@ where
         trace!("Generated new page: {:?} sig: {}", p, sig);
 
         // Update last signature in store
-        store.set_last_sig(&sig)
+        let info = ObjectInfo{page_index: p.header().index(), block_index: 0, sig: sig.clone()};
+        store.set_last(&info)
             .map_err(EngineError::Store)?;
 
 
@@ -195,7 +197,7 @@ where
     }
 
     /// Publish service data
-    pub fn publish<B: DataBody>(&mut self, body: B, opts: &[Options]) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+    pub fn publish<B: DataBody>(&mut self, body: B, opts: &[Options]) -> Result<Signature, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         
         // TODO: Fetch last signature / associated primary page
 
@@ -213,10 +215,16 @@ where
         let data = p.raw();
         let sig = p.signature();
 
+        let info = ObjectInfo{
+            page_index: self.svc.version(), 
+            block_index: p.header().index(),
+            sig: sig.clone(),
+        };
+
         debug!("Publishing object: {:02x?}", p);
 
         // Update last sig
-        self.store.set_last_sig(&sig)
+        self.store.set_last(&info)
             .map_err(EngineError::Store)?;
 
         // Write to store
@@ -234,7 +242,7 @@ where
             }
         }
 
-        Ok(())
+        Ok(sig)
     }
 
     /// Subscribe to the specified service, optionally using the provided address
