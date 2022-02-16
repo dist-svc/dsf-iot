@@ -135,7 +135,7 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
 
         let po = dsf_rpc::PublishOptions {
             service: self.service,
-            kind: DataKind::Iot,
+            kind: 0,
             data: Some((&body[..n]).to_vec()),
         };
 

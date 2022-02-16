@@ -67,12 +67,12 @@ pub enum EngineEvent {
 #[derive(Debug, PartialEq)]
 enum EngineResponse {
     None,
-    Net(NetResponseKind),
+    Net(NetResponseBody),
     Page(Container),
 }
 
-impl From<NetResponseKind> for EngineResponse {
-    fn from(r: NetResponseKind) -> Self {
+impl From<NetResponseBody> for EngineResponse {
+    fn from(r: NetResponseBody) -> Self {
         Self::Net(r)
     }
 }
@@ -178,7 +178,7 @@ where
 
         // Generate discovery request
         let req_id = self.next_req_id();
-        let req_body = NetRequestKind::Discover(body.to_vec(), opts.to_vec());
+        let req_body = NetRequestBody::Discover(body.to_vec(), opts.to_vec());
         let mut req = NetRequest::new(self.id(), req_id, req_body, Flags::PUB_KEY_REQUEST);
         req.common.public_key = Some(self.svc.public_key());
 
@@ -262,7 +262,7 @@ where
 
         // Send subscribe request
         // TODO: how to separate target -service- from target -peer-
-        let req = NetRequestKind::Subscribe(id);
+        let req = NetRequestBody::Subscribe(id);
         self.request(&addr, req_id, req)?;
 
         debug!("Subscribe TX done (req_id: {})", req_id);
@@ -283,7 +283,7 @@ where
     }
 
     /// Send a request
-    fn request(&mut self, addr: &A, req_id: u16, data: NetRequestKind) -> Result<(), EngineError<<C as Comms>::Error, <S as    Store>::Error>> {
+    fn request(&mut self, addr: &A, req_id: u16, data: NetRequestBody) -> Result<(), EngineError<<C as Comms>::Error, <S as    Store>::Error>> {
         let mut flags = Flags::empty();
 
         // TODO: set pub_key request flag for unknown peers
@@ -354,7 +354,7 @@ where
 
 
     fn handle_req(&mut self, from: &A, req: NetRequest) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
-        use NetRequestKind::*;
+        use NetRequestBody::*;
 
         debug!("Received request: {:?} from: {} ({:?})", req, req.common.from, from);
 
@@ -370,7 +370,7 @@ where
 
         // Handle request messages
         let resp: EngineResponse = match &req.data {
-            Hello | Ping => NetResponseKind::Status(Status::Ok).into(),
+            Hello | Ping => NetResponseBody::Status(Status::Ok).into(),
             Discover(body, options) => {
                 debug!("Received discovery from {} ({:?})", req.common.from, from);
 
@@ -413,7 +413,7 @@ where
                         .map_err(EngineError::Store)? {
                     p.into()
                 } else {
-                    NetResponseKind::Status(Status::InvalidRequest).into()
+                    NetResponseBody::Status(Status::InvalidRequest).into()
                 }
             },
             Subscribe(id) if id == &self.svc.id() => {
@@ -426,7 +426,7 @@ where
 
                 evt = EngineEvent::SubscribeFrom(req.common.from.clone());
 
-                NetResponseKind::Status(Status::Ok).into()
+                NetResponseBody::Status(Status::Ok).into()
             },
             Unsubscribe(id) if id == &self.svc.id() => {
                 debug!("Removing {} ({:?}) as a subscriber", req.common.from, from);
@@ -437,20 +437,20 @@ where
 
                 evt = EngineEvent::UnsubscribeFrom(req.common.from.clone());
 
-                NetResponseKind::Status(Status::Ok).into()
+                NetResponseBody::Status(Status::Ok).into()
             },
             Subscribe(_id) | Unsubscribe(_id) => {
-                NetResponseKind::Status(Status::InvalidRequest).into()
+                NetResponseBody::Status(Status::InvalidRequest).into()
             },
             //PushData(id, pages) => ()
-            _ => NetResponseKind::Status(Status::InvalidRequest).into()
+            _ => NetResponseBody::Status(Status::InvalidRequest).into()
         };
 
         Ok((resp, evt))
     }
 
     fn handle_resp(&mut self, from: &A, resp: NetResponse) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
-        //use NetResponseKind::*;
+        //use NetResponseBody::*;
 
         debug!("Received response: {:?} from: {:?}", resp, from);
 
@@ -468,7 +468,7 @@ where
         // Handle response messages
         match (&peer.subscribed, &resp.data) {
             // Subscribe responses
-            (SubscribeState::Subscribing(id), NetResponseKind::Status(st)) if req_id == *id => {
+            (SubscribeState::Subscribing(id), NetResponseBody::Status(st)) if req_id == *id => {
                 if *st == Status::Ok {
                     info!("Subscribe ok for {} ({:?})", resp.common.from, from);
 
@@ -485,7 +485,7 @@ where
                 }
             },
             // Unsubscribe response
-            (SubscribeState::Unsubscribing(id), NetResponseKind::Status(st)) if req_id == *id => {
+            (SubscribeState::Unsubscribing(id), NetResponseBody::Status(st)) if req_id == *id => {
                 if *st == Status::Ok {
                     info!("Unsubscribe ok for {} ({:?})", resp.common.from, from);
 
@@ -504,7 +504,7 @@ where
             // TODO: what other responses are important?
             //NoResult => (),
             //PullData(_, _) => (),
-            (_, NetResponseKind::Status(status)) => {
+            (_, NetResponseBody::Status(status)) => {
                 debug!("Received status: {:?} for peer: {:?}", status, peer);
             }
             _ => todo!(),
@@ -531,14 +531,14 @@ where
                     }
                 }).map_err(EngineError::Store)?;
 
-                return Ok((NetResponseKind::Status(Status::Ok).into(), evt));
+                return Ok((NetResponseBody::Status(Status::Ok).into(), evt));
             },
         };
 
         // Check for subscription
         if !peer.subscribed() {
             warn!("Not subscribed to peer: {}", p.id());
-            return Ok((NetResponseKind::Status(Status::InvalidRequest).into(), evt));
+            return Ok((NetResponseBody::Status(Status::InvalidRequest).into(), evt));
         }
 
         // Emit rx event
@@ -550,7 +550,7 @@ where
         }
 
         // Respond with OK
-        Ok((NetResponseKind::Status(Status::Ok).into(), evt))
+        Ok((NetResponseBody::Status(Status::Ok).into(), evt))
     }
 }
 
@@ -604,11 +604,11 @@ mod test {
         let from = 1;
 
         let tests = [
-            (NetRequestKind::Hello,                     NetResponseKind::Status(Status::Ok)),
-            (NetRequestKind::Ping,                      NetResponseKind::Status(Status::Ok)),
-            //(NetRequestKind::Query(e.svc.id()),         NetResponseKind::Status(Status::Ok)),
-            //(NetRequestKind::Subscribe(e.svc.id()),     NetResponseKind::Status(Status::Ok)),
-            //(NetRequestKind::Unsubscribe(e.svc.id()),   NetResponseKind::Status(Status::Ok)),
+            (NetRequestBody::Hello,                     NetResponseBody::Status(Status::Ok)),
+            (NetRequestBody::Ping,                      NetResponseBody::Status(Status::Ok)),
+            //(NetRequestBody::Query(e.svc.id()),         NetResponseBody::Status(Status::Ok)),
+            //(NetRequestBody::Subscribe(e.svc.id()),     NetResponseBody::Status(Status::Ok)),
+            //(NetRequestBody::Unsubscribe(e.svc.id()),   NetResponseBody::Status(Status::Ok)),
         ];
 
         for t in &tests {
@@ -631,11 +631,11 @@ mod test {
         let from = 1;
 
         // Build subscribe request and execute
-        let req = NetRequest::new(p.id(), 1, NetRequestKind::Subscribe(e.svc.id()), Default::default());
+        let req = NetRequest::new(p.id(), 1, NetRequestBody::Subscribe(e.svc.id()), Default::default());
         let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
-        assert_eq!(resp, NetResponseKind::Status(Status::Ok).into());
+        assert_eq!(resp, NetResponseBody::Status(Status::Ok).into());
 
         // Check subscriber state
         assert_eq!(e.store.peers.get(&p.id()).map(|p| p.subscriber ), Some(true));
@@ -651,11 +651,11 @@ mod test {
         e.store.update_peer(&p.id(), |p| p.subscriber = true ).unwrap();
 
         // Build subscribe request and execute
-        let req = NetRequest::new(p.id(), 1, NetRequestKind::Unsubscribe(e.svc.id()), Default::default());
+        let req = NetRequest::new(p.id(), 1, NetRequestBody::Unsubscribe(e.svc.id()), Default::default());
         let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
-        assert_eq!(resp, NetResponseKind::Status(Status::Ok).into());
+        assert_eq!(resp, NetResponseBody::Status(Status::Ok).into());
 
         // Check subscriber state
         assert_eq!(e.store.peers.get(&p.id()).map(|p| p.subscriber ), Some(false));
@@ -669,7 +669,7 @@ mod test {
         // Build net request and execute
         let ep_filter: &[Descriptor] = &[Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![])];
         let (body, n) = ep_filter.encode_buff::<128>().unwrap();
-        let req = NetRequest::new(p.id(), 1, NetRequestKind::Discover((&body[..n]).to_vec(), vec![]), Default::default());
+        let req = NetRequest::new(p.id(), 1, NetRequestBody::Discover((&body[..n]).to_vec(), vec![]), Default::default());
         let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
@@ -740,7 +740,7 @@ mod test {
         let m = NetMessage::convert(b, &e.store).expect("Failed to convert message");
 
         let expected = NetRequest::new(e.svc.id(), e.req_id, 
-                NetRequestKind::Subscribe(p.id()), Default::default());
+                NetRequestBody::Subscribe(p.id()), Default::default());
 
         assert_eq!( m, NetMessage::Request(expected), "Request mismatch");
 
@@ -749,7 +749,7 @@ mod test {
         let mut buff = [0u8; 512];
         let (_n, sp) = p.publish_primary(Default::default(), &mut buff).unwrap();
 
-        let resp = NetResponse::new(p.id(), e.req_id, NetResponseKind::Status(Status::Ok), Default::default());
+        let resp = NetResponse::new(p.id(), e.req_id, NetResponseBody::Status(Status::Ok), Default::default());
         e.handle_resp(&from, resp).expect("Response handling failed");
 
         // Check peer state is now subscribed

@@ -150,11 +150,12 @@ impl IotClient {
     pub async fn publish_raw(
         &mut self,
         service: ServiceIdentifier,
-        kind: DataKind,
+        kind: u16,
         data: &[u8],
     ) -> Result<PublishInfo, IotError> {
         let p = dsf_rpc::data::PublishOptions {
             service,
+            // TODO: reintroduce kinds
             kind: kind.into(),
             data: Some(data.to_vec()),
         };
