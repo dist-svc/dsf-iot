@@ -33,6 +33,9 @@ pub enum Command {
     /// Locate an IoT service
     Locate(LocateOptions),
 
+    /// Discover local IoT services
+    Discover(DiscoverOptions),
+
     /// Fetch IoT service information
     Info(InfoOptions),
 
@@ -187,4 +190,9 @@ impl Into<Vec<Options>> for MetaOptions {
     fn into(self) -> Vec<Options> {
         todo!()
     }
+}
+
+#[derive(Debug, Clone, StructOpt)]
+pub struct DiscoverOptions {
+
 }

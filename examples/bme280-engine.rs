@@ -1,8 +1,8 @@
 
+use std::time::{Instant, Duration};
+
 use dsf_iot::endpoint::DataRef;
 use structopt::StructOpt;
-
-use humantime::Duration;
 
 use linux_embedded_hal::{self as hal, Delay, I2cdev};
 
@@ -31,7 +31,7 @@ struct Config {
 
     #[structopt(long, default_value = "1m")]
     /// Specify a period for sensor readings
-    period: Duration,
+    period: humantime::Duration,
 
     #[structopt(long, default_value = "info")]
     /// Enable verbose logging
@@ -64,23 +64,37 @@ fn main() -> Result<(), anyhow::Error> {
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut e = match Engine::udp(descriptors, "127.0.0.1:0", store) {
+    let mut engine = match Engine::udp(descriptors, "127.0.0.1:0", store) {
         Ok(e) => e,
         Err(e) => {
             return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));
         }
     };
 
-    println!("Using service: {:?}", e.id());
+    println!("Using service: {:?}", engine.id());
 
     // Connect to sensor
     let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
     let mut bme280 = BME280::new(i2c_bus, opts.i2c_addr, Delay);
     bme280.init().unwrap();
 
+    let mut last = Instant::now();
+
     // Run sensor loop
     loop {
-        // Take measurement
+        // Tick engine to handle received messages etc.
+        if let Err(e) = engine.tick() {
+            error!("Tick error: {:?}", e);
+        }
+
+        // If we're not yet due for a measurement, sleep and continue
+        let now = Instant::now();
+        if now.duration_since(last) < *opts.period {
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+
+        // When we've timed out, take measurement
         let m = bme280.measure().unwrap();
 
         let data = [
@@ -93,7 +107,7 @@ fn main() -> Result<(), anyhow::Error> {
 
         // Publish new object
         let (b, n) = (&data[..]).encode_buff::<512>()?;
-        match e.publish(&b[..n], &[]) {
+        match engine.publish(&b[..n], &[]) {
             Ok(_) => {
                 println!("Published object: ")
             },
@@ -102,9 +116,7 @@ fn main() -> Result<(), anyhow::Error> {
             }
         }
 
-        // Wait until next measurement
-        std::thread::sleep(*opts.period);
+        // Update last timestamp
+        last = now;
     }
-
-    Ok(())
 }

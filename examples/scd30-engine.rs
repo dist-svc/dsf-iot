@@ -1,9 +1,8 @@
+use std::time::{Duration, Instant};
 
 use dsf_iot::endpoint::DataRef;
 use hal::i2cdev::linux::LinuxI2CError;
 use structopt::StructOpt;
-
-use humantime::Duration;
 
 use linux_embedded_hal::{self as hal, Delay, I2cdev};
 use embedded_hal::blocking::delay::DelayMs;
@@ -29,7 +28,7 @@ struct Config {
 
     #[structopt(long, default_value = "1m")]
     /// Specify a period for sensor readings
-    period: Duration,
+    period: humantime::Duration,
 
     #[structopt(long, default_value = "bme280.db")]
     /// Database file for BME280 engine
@@ -37,7 +36,7 @@ struct Config {
 
     #[structopt(long, default_value = "100ms")]
     /// Delay between sensor poll operations
-    poll_delay: Duration,
+    poll_delay: humantime::Duration,
 
     #[structopt(long = "allowed-errors", default_value="3")]
     /// Number of allowed I2C errors (per measurement attempt) prior to exiting
@@ -80,14 +79,15 @@ fn main() -> Result<(), anyhow::Error> {
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut e = match Engine::udp(descriptors, "127.0.0.1:0", store) {
+    let mut engine = match Engine::udp(&descriptors, "0.0.0.0:10100", store) {
         Ok(e) => e,
         Err(e) => {
             return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));
         }
     };
 
-    info!("Using service: {:?}", e.id());
+    info!("Using service: {:?}", engine.id());
+    info!("Endpoints: {:?}", descriptors);
 
     // Connect to sensor
     let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
@@ -100,13 +100,24 @@ fn main() -> Result<(), anyhow::Error> {
         return Err(anyhow::anyhow!("Failed to start continuous mode: {:?}", e));
     }
 
-    debug!("Waiting for sensor to initialise");
-    std::thread::sleep(*opts.period);
-
     // Run sensor loop
+    let mut last = Instant::now();
     loop {
+        // Tick engine to handle received messages etc.
+        if let Err(e) = engine.tick() {
+            error!("Tick error: {:?}", e);
+        }
+
+        // If we're not yet due for a measurement, sleep and continue
+        let now = Instant::now();
+        if now.duration_since(last) < *opts.period {
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+                
         debug!("Starting sensor read cycle");
 
+        // Otherwise, let's get reading!
         let m = match sensor_read(&opts, &mut scd30) {
             Ok(m) => m,
             Err(e) => {
@@ -120,6 +131,7 @@ fn main() -> Result<(), anyhow::Error> {
             }
         };
 
+        // Save the new measurement
         let data = [
             DataRef::new(m.temp.into(), &[]),
             DataRef::new(m.co2.into(), &[]),
@@ -130,7 +142,7 @@ fn main() -> Result<(), anyhow::Error> {
 
         // Publish new object
         let (b, n) = (&data[..]).encode_buff::<512>()?;
-        match e.publish(&b[..n], &[]) {
+        match engine.publish(&b[..n], &[]) {
             Ok(sig) => {
                 println!("Published object: {}", sig);
             },
@@ -139,8 +151,8 @@ fn main() -> Result<(), anyhow::Error> {
             }
         }
 
-        // Wait until next measurement
-        std::thread::sleep(*opts.period);
+        // Update timeout for next measurement
+        last = now;
     }
 
     Ok(())

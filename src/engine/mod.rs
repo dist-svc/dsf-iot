@@ -61,7 +61,7 @@ pub enum EngineEvent {
     UnsubscribeFrom(Id),
     SubscribedTo(Id),
     UnsubscribedTo(Id),
-    ReceivedData(Id),
+    ReceivedData(Id, Signature),
 }
 
 #[derive(Debug, PartialEq)]
@@ -179,9 +179,8 @@ where
         // Generate discovery request
         let req_id = self.next_req_id();
         let req_body = NetRequestBody::Discover(body.to_vec(), opts.to_vec());
-        let mut req = NetRequest::new(self.id(), req_id, req_body, Flags::PUB_KEY_REQUEST);
+        let mut req = NetRequest::new(self.id(), req_id, req_body, Flags::PUB_KEY_REQUEST | Flags::NO_PERSIST);
         req.common.public_key = Some(self.svc.public_key());
-
 
         debug!("Broadcasting discovery request: {:?}", req);
 
@@ -256,7 +255,7 @@ where
 
         // Update subscription
         self.store.update_peer(&id, |p| {
-            // TODO: include who this is via
+            // TODO: include parent for delegation support
             p.subscribed = SubscribeState::Subscribing(req_id);
         }).map_err(EngineError::Store)?;
 
@@ -277,13 +276,13 @@ where
 
         // TODO: walk subscribers and expire if required
 
-        // TODO: walk subscriptions and re-subscribe if required
+        // TODO: walk subscriptions and re-subscribe as required
 
         todo!()
     }
 
     /// Send a request
-    fn request(&mut self, addr: &A, req_id: u16, data: NetRequestBody) -> Result<(), EngineError<<C as Comms>::Error, <S as    Store>::Error>> {
+    fn request(&mut self, addr: &A, req_id: u16, data: NetRequestBody) -> Result<(), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
         let mut flags = Flags::empty();
 
         // TODO: set pub_key request flag for unknown peers
@@ -300,8 +299,8 @@ where
     }
 
     /// Handle received data
-    pub fn handle(&mut self, from: A, data: &[u8]) -> Result<EngineEvent, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
-        debug!("Received {} bytes from {:?}", data.len(), from);
+    pub fn handle<T: ImmutableData>(&mut self, from: A, data: T) -> Result<EngineEvent, EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+        debug!("Received {} bytes from {:?}", data.as_ref().len(), from);
 
         // Parse base object
         let base = match Container::parse(data, &self.store) {
@@ -314,10 +313,16 @@ where
 
         debug!("Received object: {:02x?}", base);
 
+        // Ignore our own packets
+        if base.id() == self.svc.id() {
+            debug!("Dropping own packet");
+            return Ok(EngineEvent::None)
+        }
+
         let req_id = base.header().index();
 
         // Convert and handle messages
-        let (resp, evt) = match NetMessage::convert(base.clone(), &self.store) {
+        let (resp, evt) = match NetMessage::convert(base.to_owned(), &self.store) {
             Ok(NetMessage::Request(req)) => self.handle_req(&from, req)?,
             Ok(NetMessage::Response(resp)) => self.handle_resp(&from, resp)?,
             _ if base.header().kind().is_page() => self.handle_page(&from, base)?,
@@ -358,12 +363,16 @@ where
 
         debug!("Received request: {:?} from: {} ({:?})", req, req.common.from, from);
 
-        if let Some(pub_key) = req.common.public_key {
-            debug!("Update peer: {:?}", from);
-            self.store.update_peer(&req.common.from, |p| {
-                p.keys.pub_key = Some(pub_key.clone());
-                p.addr = Some(from.clone());
-            }).map_err(EngineError::Store)?;
+        // Update peer information if provided and NO_PERSIST is not set
+        match req.common.public_key {
+            Some(pub_key) if !req.flags.contains(Flags::NO_PERSIST) => {
+                debug!("Update peer: {:?}", from);
+                self.store.update_peer(&req.common.from, |p| {
+                    p.keys.pub_key = Some(pub_key.clone());
+                    p.addr = Some(from.clone());
+                }).map_err(EngineError::Store)?;
+            },
+            _ => (),
         }
 
         let mut evt = EngineEvent::None;
@@ -375,6 +384,13 @@ where
                 debug!("Received discovery from {} ({:?})", req.common.from, from);
 
                 let mut matches = false;
+
+                // Respond to empty requests
+                // TODO: options.len() won't be empty because of pub_key etc.., how best to filter?
+                // TODO: only for IoT applications, don't match on descriptors for private services?
+                if body.len() == 0 {
+                    matches = true;
+                }
 
                 // Iterate through matching endpoints
                 for e in Descriptor::parse_iter(body).filter_map(|d| d.ok() ) {
@@ -514,43 +530,55 @@ where
         Ok((EngineResponse::None, evt))
     }
 
-    fn handle_page<T: ImmutableData>(&mut self, from: &A, p: Container<T>) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
-        debug!("Received page: {:?} from: {:?}", p, from);
-
-        let mut evt = EngineEvent::None;
+    fn handle_page<T: ImmutableData>(&mut self, from: &A, page: Container<T>) -> Result<(EngineResponse, EngineEvent), EngineError<<C as Comms>::Error, <S as Store>::Error>> {
+        debug!("Received page: {:?} from: {:?}", page, from);
 
         // Find matching peer for rx'd page
-        let peer = match self.store.get_peer(&p.id()).map_err(EngineError::Store)? {
-            Some(p) => p,
-            None => {
-                warn!("No peer for page from id: {}", p.id());
+        let peer = self.store.get_peer(&page.id()).map_err(EngineError::Store)?;
+        let info = page.info();
 
-                self.store.update_peer(&p.id(), |peer| {
-                    if let Ok(PageInfo::Primary(pri)) = p.info() {
-                        peer.keys.pub_key = Some(pri.pub_key.clone());
-                    }
+        // Handle page types
+        let (status, evt) = match (peer, info) {
+            // New primary page
+            // TODO: only if discovering..?
+            (None, Ok(PageInfo::Primary(pri))) => {
+                // Write peer info to store
+                self.store.update_peer(&page.id(), |peer| {
+                    peer.keys.pub_key = Some(pri.pub_key.clone());
                 }).map_err(EngineError::Store)?;
 
-                return Ok((NetResponseBody::Status(Status::Ok).into(), evt));
+                (Status::Ok, EngineEvent::Discover(page.id()))
+            },
+            // Updated primary page
+            (Some(_peer), Ok(PageInfo::Primary(_pri))) => {
+                // TODO: update peer if page is newer?
+                (Status::Ok, EngineEvent::None)
+            },
+            // Data without subscription
+            (Some(peer), Ok(PageInfo::Data(_data))) if !peer.subscribed() => {
+                warn!("Not subscribed to peer: {}", page.id());
+                (Status::InvalidRequest, EngineEvent::None)
+            },
+            // Data with subscription
+            (Some(_peer), Ok(PageInfo::Data(_data))) => {
+                // TODO: store or propagate data here?
+                (Status::Ok, EngineEvent::ReceivedData(page.id(), page.signature()))
+            },
+            // Unhandled page
+            _ => {
+                warn!("Received unexpected page {:?}", page);
+                (Status::InvalidRequest, EngineEvent::None)
             },
         };
 
-        // Check for subscription
-        if !peer.subscribed() {
-            warn!("Not subscribed to peer: {}", p.id());
-            return Ok((NetResponseBody::Status(Status::InvalidRequest).into(), evt));
-        }
-
-        // Emit rx event
-        evt = EngineEvent::ReceivedData(p.id().clone());
 
         // Call receive handler
         if let Some(on_rx) = self.on_rx.as_mut() {
-            (on_rx)(&p.to_owned());
+            (on_rx)(&page.to_owned());
         }
 
         // Respond with OK
-        Ok((NetResponseBody::Status(Status::Ok).into(), evt))
+        Ok((NetResponseBody::Status(status).into(), evt))
     }
 }
 

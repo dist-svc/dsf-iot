@@ -206,7 +206,12 @@ pub struct SledStore<Addr: Clone + Debug> {
 impl <Addr: Clone + Debug> SledStore<Addr> {
     /// Create a new sled-backed store
     pub fn new(path: &str) -> Result<Self, sled::Error> {
-        let db = sled::open(path)?;
+        let db = sled::Config::default()
+            .path(path)
+            .cache_capacity(100_000_000)
+            .flush_every_ms(Some(1_000))
+            .open()?;
+
         let peers = std::collections::HashMap::new();
 
         Ok(Self{db, peers, _addr: PhantomData})

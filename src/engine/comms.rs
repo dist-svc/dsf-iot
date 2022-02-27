@@ -91,7 +91,7 @@ impl Comms for std::net::UdpSocket {
         
         let a = match self.local_addr()? {
             SocketAddr::V4(mut v4) => {
-                v4.set_ip(Ipv4Addr::new(127, 0, 0, 2));
+                v4.set_ip(Ipv4Addr::new(255, 255, 255, 255));
                 v4
             },
             _ => unimplemented!(),

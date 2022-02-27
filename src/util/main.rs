@@ -1,5 +1,9 @@
 
 
+use std::time::{Instant, Duration};
+
+use dsf_core::prelude::ServiceBuilder;
+use dsf_iot::engine::{Engine, MemoryStore, EngineEvent};
 use dsf_rpc::DataInfo;
 use structopt::StructOpt;
 
@@ -62,6 +66,29 @@ async fn main() -> Result<(), anyhow::Error> {
         },
         Command::Decode(opts) => {
             IotClient::decode(opts)?;
+
+            return Ok(())
+        },
+        Command::Discover(_opts) => {
+            // Create transient service
+            let mut engine = Engine::udp(&[], "0.0.0.0:10100", MemoryStore::new())?;
+
+            info!("Starting discovery from: {}", engine.id());
+
+            // Issue discover message
+            let req_id = engine.discover(&[], &[])?;
+
+            // Await responses
+            let then = Instant::now();
+            while Instant::now().duration_since(then) < Duration::from_secs(3) {
+                
+                if let EngineEvent::Discover(id) = engine.tick()? {
+                    info!("Discovered service: {:?}", id);
+                }
+
+            }
+
+            info!("Discovery complete");
 
             return Ok(())
         }
