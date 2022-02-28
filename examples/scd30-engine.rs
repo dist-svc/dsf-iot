@@ -1,6 +1,5 @@
 use std::time::{Duration, Instant};
 
-use dsf_iot::endpoint::DataRef;
 use hal::i2cdev::linux::LinuxI2CError;
 use structopt::StructOpt;
 
@@ -13,11 +12,8 @@ use tracing::{debug, info, warn, error};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_core::options::Metadata;
-use dsf_core::base::{Encode};
-
 use dsf_iot::prelude::*;
-use dsf_iot::engine::{Engine, SledStore};
+use dsf_iot::engine::{SledStore};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "DSF IoT BME280 Client")]
@@ -70,16 +66,16 @@ fn main() -> Result<(), anyhow::Error> {
     };
 
     // Setup service
-    let descriptors = [
+    let descriptors = IotInfo::new(&[
         EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![]),
         EpDescriptor::new(EpKind::Co2, EpFlags::R, vec![]),
         EpDescriptor::new(EpKind::Humidity, EpFlags::R, vec![]),
-    ];
+    ]).map_err(|_| anyhow::anyhow!("Descriptor allocation failed") )?;
 
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut engine = match Engine::udp(&descriptors, "0.0.0.0:10100", store) {
+    let mut engine = match IotEngine::udp(descriptors, "0.0.0.0:10100", store) {
         Ok(e) => e,
         Err(e) => {
             return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));
@@ -87,7 +83,7 @@ fn main() -> Result<(), anyhow::Error> {
     };
 
     info!("Using service: {:?}", engine.id());
-    info!("Endpoints: {:?}", descriptors);
+    //info!("Endpoints: {:?}", descriptors);
 
     // Connect to sensor
     let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
@@ -132,17 +128,16 @@ fn main() -> Result<(), anyhow::Error> {
         };
 
         // Save the new measurement
-        let data = [
-            DataRef::new(m.temp.into(), &[]),
-            DataRef::new(m.co2.into(), &[]),
-            DataRef::new(m.rh.into(), &[]),
-        ];
+        let data = IotData::new(&[
+            EpData::new(m.temp.into(), vec![]),
+            EpData::new(m.co2.into(), vec![]),
+            EpData::new(m.rh.into(), vec![]),
+        ]).map_err(|_| anyhow::anyhow!("Data allocation failed") )?;
 
         info!("Measurement: {:?}", data);
 
         // Publish new object
-        let (b, n) = (&data[..]).encode_buff::<512>()?;
-        match engine.publish(&b[..n], &[]) {
+        match engine.publish(data, &[]) {
             Ok(sig) => {
                 println!("Published object: {}", sig);
             },

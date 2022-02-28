@@ -1,5 +1,6 @@
 use core::marker::PhantomData;
 use core::fmt::{Display, Debug};
+use std::convert::TryFrom;
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -14,8 +15,6 @@ use dsf_core::wire::Container;
 
 use crate::endpoint::{self as ep};
 use crate::error::IotError;
-
-pub const IOT_APP_ID: u16 = 1;
 
 pub const IOT_SERVICE_PAGE_KIND: u16 = 1;
 pub const IOT_DATA_PAGE_KIND: u16 = 2;
@@ -120,155 +119,6 @@ impl IotService {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct IotInfo<C: stor::Stor<Metadata> = stor::Owned, D: AsRef<[ep::Descriptor<C>]> + Debug = Vec<ep::Descriptor<C>>> {
-    pub descriptors: D,
-    _c: PhantomData<C>,
-}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> IotInfo<C, D> {
-    pub fn new(descriptors: D) -> Self {
-        Self{ descriptors, _c: PhantomData }
-    }
-}
-
-impl <'a, C: stor::Stor<Metadata>> IotInfo<C, &'a [ep::Descriptor<C>]> {
-    pub fn from_slice(descriptors: &'a [ep::Descriptor<C>]) -> Self {
-        Self{ descriptors, _c: PhantomData }
-    }
-}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> From<D> for IotInfo<C, D> {
-    fn from(descriptors: D) -> Self {
-        Self{ descriptors, _c: PhantomData }
-    }
-}
-
-/// PageBody marker allows this to be used with [`dsf_core::Service::publish_data`]
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> PageBody for IotInfo<C, D> {}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> core::fmt::Display for IotInfo<C, D> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let d = self.descriptors.as_ref();
-        for i in 0..d.len() {
-            let e = &d[i];
-            writeln!(f, "  - {:2}: {:16} in {:4} (metadata: {:?})", i, e.kind, e.kind.unit(), e.meta)?;
-        }
-        Ok(())
-    }
-}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Default + Debug> Default for IotInfo<C, D> {
-    fn default() -> Self {
-        Self { descriptors: Default::default(), _c: Default::default() }
-    }
-}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Descriptor<C>]> + Debug> Encode for IotInfo<C, D> {
-    type Error = IotError;
-
-    fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut index = 0;
-
-        // Encode each endpoint entry
-        for ed in self.descriptors.as_ref() {
-            index += ed.encode(&mut buff[index..])?;
-        }
-
-        Ok(index)
-    }
-}
-
-impl Parse for IotInfo<stor::Owned> {
-    type Output = IotInfo<stor::Owned>;
-
-    type Error = IotError;
-
-    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
-        let mut index = 0;
-        let mut descriptors = vec![];
-
-        // Decode each endpoint entry
-        while index < buff.len() {
-            let (ed, n) = ep::Descriptor::parse(&buff[index..])?;
-
-            descriptors.push(ed);
-            index += n;
-        }
-
-        Ok((IotInfo{descriptors, _c: PhantomData}, index))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct IotData<C: stor::Stor<Metadata> = stor::Owned, D: AsRef<[ep::Data<C>]> + Debug = Vec<ep::DataOwned>> {
-    /// Measurement values (these must correspond with service endpoints)
-    pub data: D,
-
-    _c: PhantomData<C>,
-}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> IotData<C, D> {
-    pub fn new(data: D) -> Self {
-        Self{ data, _c: PhantomData }
-    }
-}
-
-impl <'a, C: stor::Stor<Metadata>> IotData<C, &'a [ep::Data<C>]> {
-    pub fn from_slice(data: &'a [ep::Data<C>]) -> Self {
-        Self{ data, _c: PhantomData }
-    }
-}
-
-/// DataBody marker allows this to be used with [`dsf_core::Service::publish_data`]
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> DataBody for IotData<C, D> {}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> core::fmt::Display for IotData<C, D> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let d = self.data.as_ref();
-        for i in 0..d.len() {
-            let e = &d[i];
-            writeln!(f, "  - {:2}: {:4} (metadata: {:?})", i, e.value, e.meta)?;
-        }
-        Ok(())
-    }
-}
-
-impl <C: stor::Stor<Metadata>, D: AsRef<[ep::Data<C>]> + Debug> Encode for IotData<C, D> {
-    type Error = IotError;
-
-    fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut index = 0;
-
-        // Encode each endpoint entry
-        for ed in self.data.as_ref() {
-            index += ed.encode(&mut buff[index..])?;
-        }
-
-        Ok(index)
-    }
-}
-
-impl Parse for IotData<stor::Owned> {
-    type Output = IotData<stor::Owned>;
-
-    type Error = IotError;
-
-    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
-        let mut index = 0;
-        let mut data = vec![];
-
-        // Decode each endpoint entry
-        while index < buff.len() {
-            let (ed, n) = ep::Data::parse(&buff[index..])?;
-
-            data.push(ed);
-            index += n;
-        }
-
-        Ok((IotData{data, _c: PhantomData}, index))
-    }
-}
 
 #[cfg(test)]
 mod test {

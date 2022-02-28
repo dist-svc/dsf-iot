@@ -1,6 +1,7 @@
 
 use core::fmt::Debug;
 
+use dsf_core::{base::PageBody, api::Application};
 use log::debug;
 
 use crate::prelude::EpDescriptor;
@@ -8,7 +9,7 @@ use crate::prelude::EpDescriptor;
 use super::{Engine, Store, EngineError, EngineEvent};
 
 
-pub trait Comms {
+pub trait Communications {
     /// Address for directing packets
     type Address: Debug;
 
@@ -28,9 +29,9 @@ pub trait Comms {
 
 
 #[cfg(feature="std")]
-impl <S: Store<Address=std::net::SocketAddr>, D: AsRef<[EpDescriptor]>> Engine<'_, std::net::UdpSocket, D, S> {
+impl <App: Application, S: Store<Address=std::net::SocketAddr>> Engine<App, std::net::UdpSocket, S> {
     /// Create a new UDP engine instance
-    pub fn udp<A: std::net::ToSocketAddrs + Debug>(descriptors: D, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
+    pub fn udp<A: std::net::ToSocketAddrs + Debug>(info: App::Info, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
         debug!("Connecting to socket: {:?}", addr);
 
         // Attempt to bind UDP socket
@@ -41,24 +42,21 @@ impl <S: Store<Address=std::net::SocketAddr>, D: AsRef<[EpDescriptor]>> Engine<'
         comms.set_nonblocking(true).map_err(EngineError::Comms)?;
 
         // Create engine instance
-        Self::new(descriptors, comms, store)
+        Self::new(info, comms, store)
     }
 
     // Tick function to update engine
     pub fn tick(&mut self) -> Result<EngineEvent, EngineError<std::io::Error, <S as Store>::Error>> {
         let mut buff = [0u8; 512];
 
-        let mut evt = EngineEvent::None;
-
         // Check for and handle received messages
-        if let Some((n, a)) = Comms::recv(&mut self.comms, &mut buff).map_err(EngineError::Comms)? {
+        if let Some((n, a)) = Communications::recv(&mut self.comms, &mut buff).map_err(EngineError::Comms)? {
             debug!("Received {} bytes from {:?}", n, a);
-            evt = self.handle(a, &buff[..n])?;
+            return self.handle(a, &buff[..n]);
         }
 
-        // TODO: anything else?
-
-        Ok(evt)
+        // Update internal state
+        return self.update();
     }
 
     pub fn addr(&mut self) -> Result<std::net::SocketAddr, EngineError<std::io::Error, <S as Store>::Error>>{
@@ -68,7 +66,7 @@ impl <S: Store<Address=std::net::SocketAddr>, D: AsRef<[EpDescriptor]>> Engine<'
 }
 
 #[cfg(feature="std")]
-impl Comms for std::net::UdpSocket {
+impl Communications for std::net::UdpSocket {
     type Address = std::net::SocketAddr;
 
     type Error = std::io::Error;
@@ -118,7 +116,7 @@ impl Default for MockComms {
 }
 
 #[cfg(test)]
-impl Comms for MockComms {
+impl Communications for MockComms {
     type Address = u8;
 
     type Error = core::convert::Infallible;

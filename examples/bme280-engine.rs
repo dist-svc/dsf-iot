@@ -1,10 +1,9 @@
 
 use std::time::{Instant, Duration};
 
-use dsf_iot::endpoint::DataRef;
 use structopt::StructOpt;
 
-use linux_embedded_hal::{self as hal, Delay, I2cdev};
+use linux_embedded_hal::{Delay, I2cdev};
 
 use bme280::BME280;
 
@@ -12,11 +11,8 @@ use tracing::{debug, info, error};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_core::options::Metadata;
-use dsf_core::base::{Encode};
-
 use dsf_iot::prelude::*;
-use dsf_iot::engine::{Engine, MemoryStore};
+use dsf_iot::engine::{MemoryStore};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "DSF IoT BME280 Client")]
@@ -55,23 +51,23 @@ fn main() -> Result<(), anyhow::Error> {
     let store = MemoryStore::new();
 
     // Setup service
-    let descriptors = [
+    let descriptors = IotInfo::new(&[
         EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![]),
         EpDescriptor::new(EpKind::Pressure, EpFlags::R, vec![]),
         EpDescriptor::new(EpKind::Humidity, EpFlags::R, vec![]),
-    ];
+    ]).unwrap();
 
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut engine = match Engine::udp(descriptors, "127.0.0.1:0", store) {
+    let mut engine = match IotEngine::udp(descriptors, "127.0.0.1:0", store) {
         Ok(e) => e,
         Err(e) => {
             return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));
         }
     };
 
-    println!("Using service: {:?}", engine.id());
+    info!("Using service: {:?}", engine.id());
 
     // Connect to sensor
     let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
@@ -97,17 +93,16 @@ fn main() -> Result<(), anyhow::Error> {
         // When we've timed out, take measurement
         let m = bme280.measure().unwrap();
 
-        let data = [
-            DataRef::new(m.temperature.into(), &[]),
-            DataRef::new((m.pressure / 1000.0).into(), &[]),
-            DataRef::new(m.humidity.into(), &[]),
-        ];
+        let data = IotData::new(&[
+            EpData::new(m.temperature.into(), vec![]),
+            EpData::new((m.pressure / 1000.0).into(), vec![]),
+            EpData::new(m.humidity.into(), vec![]),
+        ]).unwrap();
 
         println!("Measurement: {:?}", data);
 
         // Publish new object
-        let (b, n) = (&data[..]).encode_buff::<512>()?;
-        match engine.publish(&b[..n], &[]) {
+        match engine.publish(data, &[]) {
             Ok(_) => {
                 println!("Published object: ")
             },

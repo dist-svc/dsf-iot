@@ -18,16 +18,45 @@ pub mod client;
 
 pub mod engine;
 
-pub const IOT_APP_ID: u16 = 1;
 
 use dsf_core::api::Application;
+use engine::{MemoryStore, Engine};
 
+/// IoT application marker object
 pub struct IoT;
 
-
+/// IoT application specification
 impl Application for IoT {
-    const APPLICATION_ID: u16 = IOT_APP_ID;
+    /// IoT is the first DSF application
+    const APPLICATION_ID: u16 = 1;
 
-    type Info = service::IotInfo;
-    type Data = service::IotData;
+    /// IotInfo object contains endpoint descriptors
+    type Info = endpoint::IotInfo;
+
+    /// IotData object contains endpoint data
+    type Data = endpoint::IotData;
+
+    /// Helper to match our service against a discovery request
+    fn matches(body: &Self::Info, req: &[u8]) -> bool {
+        use dsf_core::base::Parse;
+
+        // Always match empty requests
+        if req.len() == 0 {
+            return true;
+        }
+
+        // Otherwise check for matching endpoint types
+        for e in crate::endpoint::Descriptor::parse_iter(req).filter_map(|d| d.ok() ) {
+            if body.descriptors.contains(&e) {
+                log::debug!("Filter match on endpoint: {:?}", e);
+                return true;
+            }
+        }
+
+        // Fall through for no matches
+        return false;
+    }
 }
+
+/// IoT type for engine instances
+pub type IotEngine<Comms, Stor = MemoryStore, const N: usize = 512> = Engine<IoT, Comms, Stor, N>;

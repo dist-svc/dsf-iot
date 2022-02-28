@@ -3,8 +3,11 @@
 use std::time::{Instant, Duration};
 
 use dsf_core::prelude::ServiceBuilder;
+
+use dsf_iot::{prelude::*, IotEngine};
 use dsf_iot::engine::{Engine, MemoryStore, EngineEvent};
 use dsf_rpc::DataInfo;
+
 use structopt::StructOpt;
 
 use futures::prelude::*;
@@ -14,7 +17,6 @@ use tracing::{debug, info, error};
 use tracing_subscriber::filter::{LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_iot::prelude::*;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -71,9 +73,13 @@ async fn main() -> Result<(), anyhow::Error> {
         },
         Command::Discover(_opts) => {
             // Create transient service
-            let mut engine = Engine::udp(&[], "0.0.0.0:10100", MemoryStore::new())?;
+            let mut engine = IotEngine::udp(IotInfo::new(&[]).unwrap(), "0.0.0.0:10100", MemoryStore::new())?;
 
             info!("Starting discovery from: {}", engine.id());
+
+            engine.set_handler(|page| {
+                info!("Page: {:?}", page)
+            });
 
             // Issue discover message
             let req_id = engine.discover(&[], &[])?;
@@ -81,7 +87,8 @@ async fn main() -> Result<(), anyhow::Error> {
             // Await responses
             let then = Instant::now();
             while Instant::now().duration_since(then) < Duration::from_secs(3) {
-                
+                let mut buff = [0u8; 512];
+
                 if let EngineEvent::Discover(id) = engine.tick()? {
                     info!("Discovered service: {:?}", id);
                 }
@@ -165,7 +172,7 @@ fn print_service_list(services: &[IotService]) {
     }
 }
 
-fn print_service_data(service: &IotService, data: &[(DataInfo, IotData<stor::Owned>)]) {
+fn print_service_data(service: &IotService, data: &[(DataInfo, IotData)]) {
     println!("Service ID: {}", service.id);
     println!("Data: ");
 

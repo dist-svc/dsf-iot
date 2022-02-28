@@ -20,6 +20,9 @@ pub enum IotError {
 
     #[cfg_attr(feature="thiserror", error("Unrecognised endpoint kind"))]
     UnrecognisedEndpoint,
+
+    #[cfg_attr(feature="thiserror", error("Overrun in static vector"))]
+    Overrun
 }
 
 #[cfg(feature = "std")]

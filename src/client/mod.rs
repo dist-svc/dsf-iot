@@ -11,7 +11,7 @@ use pretty_hex::*;
 use dsf_client::prelude::*;
 use dsf_rpc::{self as rpc, PublishInfo};
 
-use dsf_core::api::ServiceHandle;
+use dsf_core::api::{ServiceHandle, Application};
 use dsf_core::prelude::*;
 use dsf_core::types::DataKind;
 
@@ -20,8 +20,8 @@ pub use dsf_rpc::ServiceIdentifier;
 use rpc::{FetchOptions, DataInfo};
 
 use crate::error::IotError;
-use crate::prelude::EpDescriptor;
-use crate::service::*;
+use crate::prelude::{EpDescriptor, IotData};
+use crate::{service::*, IoT};
 
 pub mod options;
 pub use options::*;
@@ -78,7 +78,7 @@ impl IotClient {
     /// List known IoT services
     pub async fn list(&mut self, _options: ListOptions) -> Result<Vec<IotService>, IotError> {
         let req = rpc::service::ListOptions {
-            application_id: Some(IOT_APP_ID),
+            application_id: Some(IoT::APPLICATION_ID),
         };
 
         let services = self.client.list(req).await?;
@@ -182,7 +182,7 @@ impl IotClient {
     pub async fn query(
         &mut self,
         options: QueryOptions,
-    ) -> Result<(IotService, Vec<(DataInfo, IotData<stor::Owned>)>), IotError> {
+    ) -> Result<(IotService, Vec<(DataInfo, IotData)>), IotError> {
         debug!("Querying for data: {:?}", options);
 
         let iot_info = self
@@ -250,7 +250,7 @@ impl IotClient {
 
         // Create service object
         let mut sb = ServiceBuilder::default()
-            .body(Body::Cleartext((&body[..n]).to_vec()));
+            .body(&body[..n]);
 
         // Inject private key if provided
         if let Some(pri_key) = &opts.keys.pri_key {
@@ -303,7 +303,7 @@ impl IotClient {
 
         debug!("Loading service");
 
-        let _s = Service::load(&p[0])?;
+        let _s = Service::<Vec<u8>>::load(&p[0])?;
         // TODO: display service info
 
         debug!("Loading IoT data");

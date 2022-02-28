@@ -5,9 +5,9 @@ use log::info;
 use dsf_core::prelude::*;
 use dsf_iot::prelude::*;
 
-use dsf_iot::engine::{Engine, MemoryStore, EngineEvent};
+use dsf_iot::engine::{MemoryStore, EngineEvent};
 
-type E = Engine<'static, UdpSocket, Vec<EpDescriptor>, MemoryStore, 512>;
+type E = IotEngine<UdpSocket, MemoryStore, 512>;
 
 use ctor::ctor;
 
@@ -19,14 +19,14 @@ fn init_color_backtrace() {
 fn new_engine(addr: &str, descriptors: Vec<EpDescriptor>) -> anyhow::Result<E> {
     
     // Create peer for sending requests
-    let p = ServiceBuilder::generic().build()?;
+    let p = ServiceBuilder::<IotInfo>::generic().build()?;
 
     // Setup memory store with pre-filled peer keys
     let mut s = MemoryStore::<SocketAddr>::new();
     s.update(&p.id(), |k| *k = p.keys());
 
     // Setup engine with newly created service
-    let e = E::udp(descriptors, addr, s)?;
+    let e = E::udp(IotInfo::new(&descriptors).unwrap(), addr, s)?;
 
     Ok(e)
 }
@@ -84,18 +84,16 @@ fn integration() -> anyhow::Result<()> {
 
     info!("Publishing data");
 
-    let data = IotData::<stor::Const<0>, _>::new([
-        EpData::new(27.3.into(), []),
-        EpData::new(1016.2.into(), []),
-        EpData::new(59.6.into(), []),
-    ]);
-    let mut data_buff = [0u8; 128];
-    let n = data.encode(&mut data_buff).unwrap();
+    let data = IotData::new(&[
+        EpData::new(27.3.into(), vec![]),
+        EpData::new(1016.2.into(), vec![]),
+        EpData::new(59.6.into(), vec![]),
+    ]).unwrap();
 
-    e2.publish(&data_buff[..n], &[])?;
+    let sig = e2.publish(data, &[])?;
 
     // Tick to update publish state
-    assert_eq!(e1.tick()?, EngineEvent::ReceivedData(e2.id()));
+    assert_eq!(e1.tick()?, EngineEvent::ReceivedData(e2.id(), sig));
 
     Ok(())
 }

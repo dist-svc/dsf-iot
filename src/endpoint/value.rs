@@ -4,7 +4,9 @@ use core::fmt::Debug;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-use super::{BytesIsh, StringIsh};
+pub trait BytesIsh = AsRef<[u8]> + Debug;
+pub trait StringIsh = AsRef<str> + Debug;
+
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]

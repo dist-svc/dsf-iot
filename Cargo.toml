@@ -47,6 +47,7 @@ pretty-hex = { version = "0.2.1", default_features = false }
 stor = "0.1.0"
 
 sled = { version = "0.34.7" }
+heapless = "0.7.10"
 
 
 [dependencies.dsf-core]
