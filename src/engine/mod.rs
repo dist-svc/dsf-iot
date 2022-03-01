@@ -2,7 +2,7 @@ use core::fmt::{Debug};
 use core::convert::TryFrom;
 
 use dsf_core::api::Application;
-use dsf_core::types::ImmutableData;
+use dsf_core::types::{ImmutableData, BaseKind};
 use dsf_core::wire::Container;
 use log::{trace, debug, info, warn, error};
 
@@ -324,11 +324,15 @@ where
         let req_id = base.header().index();
 
         // Convert and handle messages
-        let (resp, evt) = match NetMessage::convert(base.to_owned(), &self.store) {
-            Ok(NetMessage::Request(req)) => self.handle_req(&from, req)?,
-            Ok(NetMessage::Response(resp)) => self.handle_resp(&from, resp)?,
-            _ if base.header().kind().is_page() => self.handle_page(&from, base)?,
-            _ if base.header().kind().is_data() => self.handle_page(&from, base)?,
+        let (resp, evt) = match base.header().kind().base() {
+            BaseKind::Request | BaseKind::Response => {
+                match NetMessage::parse(base.raw().to_vec(), &self.store).map_err(EngineError::Core)? {
+                    (NetMessage::Request(req), _) => self.handle_req(&from, req)?,
+                    (NetMessage::Response(resp), _) => self.handle_resp(&from, resp)?
+                }
+            },
+            BaseKind::Page => self.handle_page(&from, base)?,
+            BaseKind::Block => self.handle_page(&from, base)?,
             _ => {
                 error!("Unhandled object type");
                 return Err(EngineError::Unhandled)
@@ -762,8 +766,7 @@ mod test {
 
 
         // Parse out page and convert back to message
-        let b = Container::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
-        let m = NetMessage::convert(b, &e.store).expect("Failed to convert message");
+        let (m, _) = NetMessage::parse(d.1, &e.svc.keys()).expect("Failed to parse object");
 
         let expected = NetRequest::new(e.svc.id(), e.req_id, 
                 NetRequestBody::Subscribe(p.id()), Default::default());

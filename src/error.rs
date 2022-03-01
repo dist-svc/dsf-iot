@@ -22,7 +22,7 @@ pub enum IotError {
     UnrecognisedEndpoint,
 
     #[cfg_attr(feature="thiserror", error("Overrun in static vector"))]
-    Overrun
+    Overrun,
 }
 
 #[cfg(feature = "std")]
