@@ -20,7 +20,7 @@ pub mod engine;
 
 
 use dsf_core::api::Application;
-use engine::{MemoryStore, Engine};
+use engine::{Engine};
 
 /// IoT application marker object
 pub struct IoT;
@@ -59,4 +59,4 @@ impl Application for IoT {
 }
 
 /// IoT type for engine instances
-pub type IotEngine<Comms, Stor = MemoryStore, const N: usize = 512> = Engine<IoT, Comms, Stor, N>;
+pub type IotEngine<Comms, Stor, const N: usize = 512> = Engine<IoT, Comms, Stor, N>;

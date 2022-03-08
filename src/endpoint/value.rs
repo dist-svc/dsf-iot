@@ -2,7 +2,7 @@ use core::str::FromStr;
 use core::fmt::Debug;
 
 #[cfg(feature = "alloc")]
-use alloc::vec::Vec;
+use alloc::{vec::Vec, string::{String, ToString}, borrow::ToOwned};
 
 pub trait BytesIsh = AsRef<[u8]> + Debug;
 pub trait StringIsh = AsRef<str> + Debug;
@@ -23,8 +23,11 @@ pub enum Value<S: StringIsh= String, B: BytesIsh = Vec<u8>> {
     Bytes(B),
 }
 
+/// Value with reference body
 pub type ValueRef<'a> = Value<&'a str, &'a [u8]>;
 
+#[cfg(feature="alloc")]
+/// Value with owned body
 pub type ValueOwned = Value<String, Vec<u8>>;
 
 impl <S: AsRef<str> + Debug, B: BytesIsh> From<bool> for Value<S, B> {
@@ -51,6 +54,7 @@ impl <B: BytesIsh> From<String> for Value<String, B> {
     }
 }
 
+#[cfg(feature="alloc")]
 impl <S: AsRef<str> + Debug> From<Vec<u8>> for Value<S, Vec<u8>> {
     fn from(v: Vec<u8>) -> Self {
         Self::Bytes(v)
@@ -70,7 +74,7 @@ impl <S: AsRef<str> + Debug, B: BytesIsh> core::fmt::Display for Value<S, B> {
     }
 }
 
-
+#[cfg(feature="alloc")]
 impl FromStr for Value<String, Vec<u8>> {
     type Err = String;
 
@@ -95,6 +99,7 @@ impl FromStr for Value<String, Vec<u8>> {
 }
 
 /// Helper to parse endpoint data from string values
+#[cfg(feature="alloc")]
 pub(crate) fn parse_endpoint_value(src: &str) -> Result<Value, String> {
     Value::from_str(src)
 }

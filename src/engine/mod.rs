@@ -19,7 +19,7 @@ pub use comms::*;
 
 // Trying to build an abstraction over IP, LPWAN, (UNIX to daemon?)
 
-pub struct Engine<App: Application, Comms: Communications, Stor: Store = MemoryStore, const N: usize = 512> {
+pub struct Engine<App: Application, Comms: Communications, Stor: Store, const N: usize = 512> {
     svc: Service<App::Info>,
 
     pri: Signature,
@@ -28,7 +28,7 @@ pub struct Engine<App: Application, Comms: Communications, Stor: Store = MemoryS
     comms: Comms,
     store: Stor,
 
-    on_rx: Option<Box<dyn FnMut(&Container)>>,
+    on_rx: Option<&'static mut dyn FnMut(&Container)>,
 }
 
 
@@ -170,8 +170,8 @@ where
         self.req_id
     }
 
-    pub fn set_handler(&mut self, on_rx: impl FnMut(&Container) + 'static) {
-        self.on_rx = Some(Box::new(on_rx));
+    pub fn set_handler(&mut self, on_rx: &'static mut dyn FnMut(&Container)) {
+        self.on_rx = Some(on_rx);
     }
 
     /// Discover local services

@@ -1,6 +1,9 @@
 use core::fmt::Write;
 use core::str::FromStr;
 
+#[cfg(feature = "alloc")]
+use alloc::{vec::Vec, string::{String, ToString}};
+
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
     (1, Kind::Temperature, "temperature",  "°C"     ),
@@ -16,7 +19,7 @@ pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
 /// For example: Temperature, Heart-Rate
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "strum", derive(strum_macros::Display))]
+#[cfg_attr(feature = "strum", derive(strum::Display))]
 #[cfg_attr(feature = "strum", strum(serialize_all="snake_case"))]
 pub enum Kind {
     /// Temperature in (degrees Celcius)

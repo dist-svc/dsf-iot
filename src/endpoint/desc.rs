@@ -1,7 +1,7 @@
 use core::fmt::{Debug};
 
 #[cfg(feature = "alloc")]
-use alloc::vec::Vec;
+use alloc::{vec::Vec, string::{String, ToString}, borrow::ToOwned};
 
 use dsf_core::base::PageBody;
 use dsf_core::prelude::Encode;
@@ -77,6 +77,12 @@ impl <M: stor::Stor<Metadata> + Debug> Descriptor<M> {
         }
 
         s
+    }
+}
+
+impl <M: stor::Stor<Metadata> + Debug> core::fmt::Display for Descriptor<M> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:16} in {:4} (metadata: {:?})\r\n", self.kind, self.kind.unit(), self.meta)
     }
 }
 

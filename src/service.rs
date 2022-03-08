@@ -1,12 +1,9 @@
 use core::marker::PhantomData;
 use core::fmt::{Display, Debug};
-use std::convert::TryFrom;
+use core::convert::TryFrom;
 
 #[cfg(feature = "alloc")]
-use alloc::vec::Vec;
-
-#[cfg(feature = "alloc")]
-use alloc::vec;
+use alloc::{vec::Vec, string::String};
 
 use dsf_core::base::{Body, Parse, Encode, DataBody, PageBody};
 use dsf_core::options::Metadata;

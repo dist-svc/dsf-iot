@@ -26,13 +26,21 @@ struct Config {
     /// Specify a period for sensor readings
     period: humantime::Duration,
 
-    #[structopt(long, default_value = "bme280.db")]
+    #[structopt(long, default_value = "scd30.db")]
     /// Database file for BME280 engine
     database: String,
 
     #[structopt(long, default_value = "100ms")]
     /// Delay between sensor poll operations
     poll_delay: humantime::Duration,
+
+    #[structopt(long)]
+    /// Service name
+    name: Option<String>,
+
+    #[structopt(long)]
+    /// Service room
+    room: Option<String>,
 
     #[structopt(long = "allowed-errors", default_value="3")]
     /// Number of allowed I2C errors (per measurement attempt) prior to exiting

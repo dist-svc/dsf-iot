@@ -1,6 +1,7 @@
 
 use core::fmt::Debug;
-use std::marker::PhantomData;
+use core::convert::TryFrom;
+use core::marker::PhantomData;
 
 use byteorder::{LittleEndian, ByteOrder};
 use dsf_core::prelude::*;
@@ -110,227 +111,236 @@ impl <Addr: Clone + Debug> Peer<Addr> {
     }
 }
 
-pub struct MemoryStore<Addr: Clone + Debug = std::net::SocketAddr> {
-    pub(crate) our_keys: Option<Keys>,
-    pub(crate) last_sig: Option<ObjectInfo>,
-    pub(crate) peers: std::collections::HashMap<Id, Peer<Addr>>,
-    pub(crate) pages: std::collections::HashMap<Signature, Container>
-}
+#[cfg(feature="std")]
+pub mod memory {
 
-impl <Addr: Clone + Debug> MemoryStore<Addr> {
-    pub fn new() -> Self {
-        Self {
-            our_keys: None,
-            last_sig: None,
-            peers: std::collections::HashMap::new(),
-            pages: std::collections::HashMap::new(),
+    pub struct MemoryStore<Addr: Clone + Debug = std::net::SocketAddr> {
+        pub(crate) our_keys: Option<Keys>,
+        pub(crate) last_sig: Option<ObjectInfo>,
+        pub(crate) peers: std::collections::HashMap<Id, Peer<Addr>>,
+        pub(crate) pages: std::collections::HashMap<Signature, Container>
+    }
+
+    impl <Addr: Clone + Debug> MemoryStore<Addr> {
+        pub fn new() -> Self {
+            Self {
+                our_keys: None,
+                last_sig: None,
+                peers: std::collections::HashMap::new(),
+                pages: std::collections::HashMap::new(),
+            }
+        }
+    }
+
+    impl <Addr: Clone + Debug + 'static> Store for MemoryStore<Addr> {
+        const FEATURES: StoreFlags = StoreFlags::ALL;
+
+        type Address = Addr;
+        type Error = core::convert::Infallible;
+        type Iter<'a> = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
+
+        fn get_ident(&self) -> Result<Option<Keys>, Self::Error> {
+            Ok(self.our_keys.clone())
+        }
+
+        fn set_ident(&mut self, keys: &Keys) -> Result<(), Self::Error> {
+            self.our_keys = Some(keys.clone());
+            Ok(())
+        }
+
+        /// Fetch previous object information
+        fn get_last(&self) -> Result<Option<ObjectInfo>, Self::Error> {
+            Ok(self.last_sig.clone())
+        }
+
+        /// Update previous object information
+        fn set_last(&mut self, info: &ObjectInfo) -> Result<(), Self::Error> {
+            self.last_sig = Some(info.clone());
+            Ok(())
+        }
+
+        fn get_peer(&self, id: &Id) -> Result<Option<Peer<Self::Address>>, Self::Error> {
+            let p = self.peers.get(id);
+            Ok(p.map(|p| p.clone() ))
+        }
+
+        fn peers<'a>(&'a self) -> Self::Iter<'a> {
+            self.peers.iter()
+        }
+
+        fn update_peer<R: Debug, F: Fn(&mut Peer<Self::Address>)-> R>(&mut self, id: &Id, f: F) -> Result<R, Self::Error> {
+            let p = self.peers.entry(id.clone()).or_default();
+            Ok(f(p))
+        }
+
+        fn store_page<T: ImmutableData>(&mut self, sig: &Signature, p: &Container<T>) -> Result<(), Self::Error> {
+            self.pages.insert(sig.clone(), p.to_owned());
+            Ok(())
+        }
+
+        fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error> {
+            let p = self.pages.get(sig).map(|p| p.clone() );
+            Ok(p)
+        }
+    }
+
+    impl <'a, Addr: Clone + Debug + 'static> IntoIterator for &'a MemoryStore<Addr>{
+        type Item = (&'a Id, &'a Peer<Addr>);
+
+        type IntoIter = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.peers.iter()
+        }
+    }
+
+
+    impl <Addr: Clone + Debug> KeySource for MemoryStore<Addr> {
+        fn keys(&self, id: &Id) -> Option<Keys> {
+            self.peers.get(id).map(|p| p.keys.clone() )
         }
     }
 }
 
-impl <Addr: Clone + Debug + 'static> Store for MemoryStore<Addr> {
-    const FEATURES: StoreFlags = StoreFlags::ALL;
+#[cfg(feature="std")]
+pub mod sled {
 
-    type Address = Addr;
-    type Error = core::convert::Infallible;
-    type Iter<'a> = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
-
-    fn get_ident(&self) -> Result<Option<Keys>, Self::Error> {
-        Ok(self.our_keys.clone())
+    pub struct SledStore<Addr: Clone + Debug> {
+        db: sled::Db,
+        peers: std::collections::HashMap<Id, Peer<Addr>>,
+        _addr: PhantomData<Addr>,
     }
 
-    fn set_ident(&mut self, keys: &Keys) -> Result<(), Self::Error> {
-        self.our_keys = Some(keys.clone());
-        Ok(())
-    }
+    impl <Addr: Clone + Debug> SledStore<Addr> {
+        /// Create a new sled-backed store
+        pub fn new(path: &str) -> Result<Self, sled::Error> {
+            let db = sled::Config::default()
+                .path(path)
+                .cache_capacity(100_000_000)
+                .flush_every_ms(Some(1_000))
+                .open()?;
 
-    /// Fetch previous object information
-    fn get_last(&self) -> Result<Option<ObjectInfo>, Self::Error> {
-        Ok(self.last_sig.clone())
-    }
+            let peers = std::collections::HashMap::new();
 
-    /// Update previous object information
-    fn set_last(&mut self, info: &ObjectInfo) -> Result<(), Self::Error> {
-        self.last_sig = Some(info.clone());
-        Ok(())
-    }
-
-    fn get_peer(&self, id: &Id) -> Result<Option<Peer<Self::Address>>, Self::Error> {
-        let p = self.peers.get(id);
-        Ok(p.map(|p| p.clone() ))
-    }
-
-    fn peers<'a>(&'a self) -> Self::Iter<'a> {
-        self.peers.iter()
-    }
-
-    fn update_peer<R: Debug, F: Fn(&mut Peer<Self::Address>)-> R>(&mut self, id: &Id, f: F) -> Result<R, Self::Error> {
-        let p = self.peers.entry(id.clone()).or_default();
-        Ok(f(p))
-    }
-
-    fn store_page<T: ImmutableData>(&mut self, sig: &Signature, p: &Container<T>) -> Result<(), Self::Error> {
-        self.pages.insert(sig.clone(), p.to_owned());
-        Ok(())
-    }
-
-    fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error> {
-        let p = self.pages.get(sig).map(|p| p.clone() );
-        Ok(p)
-    }
-}
-
-impl <'a, Addr: Clone + Debug + 'static> IntoIterator for &'a MemoryStore<Addr>{
-    type Item = (&'a Id, &'a Peer<Addr>);
-
-    type IntoIter = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.peers.iter()
-    }
-}
-
-
-impl <Addr: Clone + Debug> KeySource for MemoryStore<Addr> {
-    fn keys(&self, id: &Id) -> Option<Keys> {
-        self.peers.get(id).map(|p| p.keys.clone() )
-    }
-}
-
-pub struct SledStore<Addr: Clone + Debug> {
-    db: sled::Db,
-    peers: std::collections::HashMap<Id, Peer<Addr>>,
-    _addr: PhantomData<Addr>,
-}
-
-impl <Addr: Clone + Debug> SledStore<Addr> {
-    /// Create a new sled-backed store
-    pub fn new(path: &str) -> Result<Self, sled::Error> {
-        let db = sled::Config::default()
-            .path(path)
-            .cache_capacity(100_000_000)
-            .flush_every_ms(Some(1_000))
-            .open()?;
-
-        let peers = std::collections::HashMap::new();
-
-        Ok(Self{db, peers, _addr: PhantomData})
-    }
-}
-
-const SLED_IDENT_KEY: &[u8] = b"ident";
-const SLED_PAGE_KEY: &[u8] = b"page";
-const SLED_LAST_KEY: &[u8] = b"last";
-
-impl <Addr: Clone + Debug + 'static> Store for SledStore<Addr> {
-    const FEATURES: StoreFlags = StoreFlags::ALL;
-
-    type Address = Addr;
-
-    type Error = sled::Error;
-
-    type Iter<'a> = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
-
-    fn get_ident(&self) -> Result<Option<Keys>, Self::Error> {
-        let ident = self.db.open_tree(SLED_IDENT_KEY)?;
-
-        let mut keys = Keys::default();
-
-        if let Some(pri_key) = ident.get("pri_key")? {
-            let pri_key = PrivateKey::from(pri_key.as_ref());
-
-            keys.pub_key = Some(dsf_core::crypto::pk_derive(&pri_key).unwrap());
-            keys.pri_key = Some(pri_key);
-        }
-
-        if let Some(sec_key) = ident.get("sec_key")? {
-            keys.sec_key = Some(SecretKey::from(sec_key.as_ref()));
-        }
-
-        match keys.pub_key.is_some() {
-            true => Ok(Some(keys)),
-            false => Ok(None),
+            Ok(Self{db, peers, _addr: PhantomData})
         }
     }
 
-    fn set_ident(&mut self, keys: &Keys) -> Result<(), Self::Error> {
-        let ident = self.db.open_tree(SLED_IDENT_KEY)?;
+    const SLED_IDENT_KEY: &[u8] = b"ident";
+    const SLED_PAGE_KEY: &[u8] = b"page";
+    const SLED_LAST_KEY: &[u8] = b"last";
 
-        if let Some(pri_key) = keys.pri_key.as_deref() {
-            ident.insert("pri_key", pri_key)?;
+    impl <Addr: Clone + Debug + 'static> Store for SledStore<Addr> {
+        const FEATURES: StoreFlags = StoreFlags::ALL;
+
+        type Address = Addr;
+
+        type Error = sled::Error;
+
+        type Iter<'a> = std::collections::hash_map::Iter<'a, Id, Peer<Addr>>;
+
+        fn get_ident(&self) -> Result<Option<Keys>, Self::Error> {
+            let ident = self.db.open_tree(SLED_IDENT_KEY)?;
+
+            let mut keys = Keys::default();
+
+            if let Some(pri_key) = ident.get("pri_key")? {
+                let pri_key = PrivateKey::try_from(pri_key.as_ref()).unwrap();
+
+                keys.pub_key = Some(dsf_core::crypto::pk_derive(&pri_key).unwrap());
+                keys.pri_key = Some(pri_key);
+            }
+
+            if let Some(sec_key) = ident.get("sec_key")? {
+                keys.sec_key = SecretKey::try_from(sec_key.as_ref()).ok();
+            }
+
+            match keys.pub_key.is_some() {
+                true => Ok(Some(keys)),
+                false => Ok(None),
+            }
         }
 
-        if let Some(sec_key) = keys.sec_key.as_deref() {
-            ident.insert("sec_key", sec_key)?;
+        fn set_ident(&mut self, keys: &Keys) -> Result<(), Self::Error> {
+            let ident = self.db.open_tree(SLED_IDENT_KEY)?;
+
+            if let Some(pri_key) = keys.pri_key.as_deref() {
+                ident.insert("pri_key", pri_key)?;
+            }
+
+            if let Some(sec_key) = keys.sec_key.as_deref() {
+                ident.insert("sec_key", sec_key)?;
+            }
+
+            Ok(())
         }
 
-        Ok(())
-    }
+        fn get_last(&self) -> Result<Option<ObjectInfo>, Self::Error> {
+            match self.db.get(SLED_LAST_KEY)? {
+                Some(k) => {
+                    let d = k.as_ref();
 
-    fn get_last(&self) -> Result<Option<ObjectInfo>, Self::Error> {
-        match self.db.get(SLED_LAST_KEY)? {
-            Some(k) => {
-                let d = k.as_ref();
+                    Ok(Some(ObjectInfo{
+                        page_index: LittleEndian::read_u16(&k[0..]),
+                        block_index: LittleEndian::read_u16(&k[2..]),
+                        sig: Signature::try_from(&k[4..][..SIGNATURE_LEN]).unwrap(),
+                    }))
+                },
+                None => Ok(None),
+            }
+        }
 
-                Ok(Some(ObjectInfo{
-                    page_index: LittleEndian::read_u16(&k[0..]),
-                    block_index: LittleEndian::read_u16(&k[2..]),
-                    sig: Signature::from(&k[4..]),
-                }))
-            },
-            None => Ok(None),
+        fn set_last(&mut self, info: &ObjectInfo) -> Result<(), Self::Error> {
+            let mut d = [0u8; 2 + 2 + SIGNATURE_LEN];
+
+            LittleEndian::write_u16(&mut d[0..], info.page_index);
+            LittleEndian::write_u16(&mut d[2..], info.block_index);
+            d[4..].copy_from_slice(&info.sig);
+
+            self.db.insert(SLED_LAST_KEY, d.as_slice())?;
+
+            Ok(())
+        }
+
+        fn get_peer(&self, id: &Id) -> Result<Option<Peer<Addr>>, Self::Error> {
+            let p = self.peers.get(id);
+            Ok(p.map(|p| p.clone() ))
+        }
+
+        fn peers<'a>(&'a self) -> Self::Iter<'a> {
+            self.peers.iter()
+        }
+
+        fn update_peer<R: Debug, F: Fn(&mut Peer<Addr>)-> R>(&mut self, id: &Id, f: F) -> Result<R, Self::Error> {
+            let p = self.peers.entry(id.clone()).or_default();
+            Ok(f(p))
+        }
+
+        fn store_page<T: ImmutableData>(&mut self, sig: &Signature, p: &Container<T>) -> Result<(), Self::Error> {
+            let pages = self.db.open_tree(SLED_PAGE_KEY)?;
+
+            pages.insert(sig, p.raw())?;
+
+            Ok(())
+        }
+
+        fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error> {
+            let pages = self.db.open_tree(SLED_PAGE_KEY)?;
+
+            match pages.get(sig)? {
+                Some(p) => {
+                    let (c, _n) = Container::from(p.as_ref().to_vec());
+                    Ok(Some(c))
+                },
+                None => Ok(None),
+            }
         }
     }
 
-    fn set_last(&mut self, info: &ObjectInfo) -> Result<(), Self::Error> {
-        let mut d = [0u8; 2 + 2 + SIGNATURE_LEN];
-
-        LittleEndian::write_u16(&mut d[0..], info.page_index);
-        LittleEndian::write_u16(&mut d[2..], info.block_index);
-        d[4..].copy_from_slice(&info.sig);
-
-        self.db.insert(SLED_LAST_KEY, d.as_slice())?;
-
-        Ok(())
-    }
-
-    fn get_peer(&self, id: &Id) -> Result<Option<Peer<Addr>>, Self::Error> {
-        let p = self.peers.get(id);
-        Ok(p.map(|p| p.clone() ))
-    }
-
-    fn peers<'a>(&'a self) -> Self::Iter<'a> {
-        self.peers.iter()
-    }
-
-    fn update_peer<R: Debug, F: Fn(&mut Peer<Addr>)-> R>(&mut self, id: &Id, f: F) -> Result<R, Self::Error> {
-        let p = self.peers.entry(id.clone()).or_default();
-        Ok(f(p))
-    }
-
-    fn store_page<T: ImmutableData>(&mut self, sig: &Signature, p: &Container<T>) -> Result<(), Self::Error> {
-        let pages = self.db.open_tree(SLED_PAGE_KEY)?;
-
-        pages.insert(sig, p.raw())?;
-
-        Ok(())
-    }
-
-    fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error> {
-        let pages = self.db.open_tree(SLED_PAGE_KEY)?;
-
-        match pages.get(sig)? {
-            Some(p) => {
-                let (c, _n) = Container::from(p.as_ref().to_vec());
-                Ok(Some(c))
-            },
-            None => Ok(None),
+    impl <Addr: Clone + Debug> KeySource for SledStore<Addr> {
+        fn keys(&self, id: &Id) -> Option<Keys> {
+            self.peers.get(id).map(|p| p.keys.clone() )
         }
     }
-}
 
-impl <Addr: Clone + Debug> KeySource for SledStore<Addr> {
-    fn keys(&self, id: &Id) -> Option<Keys> {
-        self.peers.get(id).map(|p| p.keys.clone() )
-    }
 }
