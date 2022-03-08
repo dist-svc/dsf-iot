@@ -16,6 +16,11 @@ pub use store::*;
 mod comms;
 pub use comms::*;
 
+#[cfg(feature = "std")]
+pub use memory_store::MemoryStore;
+
+#[cfg(feature = "sled")]
+pub use sled_store::SledStore;
 
 // Trying to build an abstraction over IP, LPWAN, (UNIX to daemon?)
 

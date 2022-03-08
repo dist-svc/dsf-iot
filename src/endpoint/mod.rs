@@ -2,10 +2,11 @@
 
 
 pub mod kinds;
-use dsf_core::{base::{PageBody, DataBody}, prelude::{Encode, Parse}};
+use dsf_core::{base::{PageBody, DataBody}, prelude::{Encode, Parse}, options::Metadata};
 pub use kinds::*;
 
 pub mod value;
+use stor::Stor;
 pub use value::*;
 
 pub mod desc;
@@ -15,14 +16,14 @@ use crate::prelude::IotError;
 
 const MAX_EPS: usize = 10;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct IotInfo {
-    pub descriptors: heapless::Vec<Descriptor, MAX_EPS>,
+    pub descriptors: Vec<Descriptor>,
 }
 
 impl IotInfo {
     pub fn new(descriptors: &[Descriptor]) -> Result<Self, ()> {
-        Ok(Self{ descriptors: heapless::Vec::from_slice(descriptors)? })
+        Ok(Self{ descriptors: descriptors.to_vec() })
     }
 }
 
@@ -41,7 +42,7 @@ impl core::fmt::Display for IotInfo {
 
 impl Default for IotInfo {
     fn default() -> Self {
-        Self { descriptors: Default::default() }
+        Self { descriptors: Vec::new() }
     }
 }
 
@@ -66,7 +67,7 @@ impl Parse for IotInfo{
 
     fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         let mut index = 0;
-        let mut descriptors = heapless::Vec::new();
+        let mut descriptors = Vec::new();
 
         // Decode each endpoint entry
         while index < buff.len() {
@@ -80,15 +81,15 @@ impl Parse for IotInfo{
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct IotData {
     /// Measurement values (these must correspond with service endpoints)
-    pub data: heapless::Vec<Data, MAX_EPS>,
+    pub data: Vec<Data>,
 }
 
 impl IotData {
     pub fn new(data: &[Data]) -> Result<Self, ()> {
-        Ok(Self{ data: heapless::Vec::from_slice(data)? })
+        Ok(Self{ data: data.to_vec() })
     }
 }
 

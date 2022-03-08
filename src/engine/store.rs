@@ -4,6 +4,7 @@ use core::convert::TryFrom;
 use core::marker::PhantomData;
 
 use byteorder::{LittleEndian, ByteOrder};
+
 use dsf_core::prelude::*;
 use dsf_core::keys::{Keys, KeySource};
 use dsf_core::types::{ImmutableData, SIGNATURE_LEN};
@@ -112,7 +113,12 @@ impl <Addr: Clone + Debug> Peer<Addr> {
 }
 
 #[cfg(feature="std")]
-pub mod memory {
+pub mod memory_store {
+    use core::fmt::Debug;
+
+    use dsf_core::prelude::*;
+
+    use super::*;
 
     pub struct MemoryStore<Addr: Clone + Debug = std::net::SocketAddr> {
         pub(crate) our_keys: Option<Keys>,
@@ -202,8 +208,13 @@ pub mod memory {
     }
 }
 
-#[cfg(feature="std")]
-pub mod sled {
+#[cfg(feature="sled")]
+pub mod sled_store {
+    use core::fmt::Debug;
+
+    use dsf_core::prelude::*;
+
+    use super::*;
 
     pub struct SledStore<Addr: Clone + Debug> {
         db: sled::Db,

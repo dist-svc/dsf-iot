@@ -1,4 +1,5 @@
 use core::fmt::{Debug};
+use core::marker::PhantomData;
 
 #[cfg(feature = "alloc")]
 use alloc::{vec::Vec, string::{String, ToString}, borrow::ToOwned};
@@ -11,6 +12,8 @@ use dsf_core::options::Metadata;
 use log::{error, trace, warn};
 
 use byteorder::{ByteOrder, NetworkEndian};
+
+//use modular_bitfield::prelude::*;
 
 use super::kinds::*;
 use super::value::*;
@@ -55,6 +58,20 @@ pub struct Descriptor<M: stor::Stor<Metadata> + Debug = stor::Owned> {
     /// Endpoint metadata
     pub meta: M::List,
 }
+
+pub struct Descriptor2<T: Debug> {
+    t: T,
+}
+
+impl Descriptor2<&[u8]> {
+
+}
+
+trait Descriptor3 {
+
+}
+
+
 
 
 impl <M: stor::Stor<Metadata> + Debug> Descriptor<M> {
