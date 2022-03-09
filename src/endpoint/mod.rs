@@ -1,4 +1,5 @@
 
+use alloc::vec::Vec;
 
 
 pub mod kinds;
@@ -129,7 +130,7 @@ impl Parse for IotData {
 
     fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         let mut index = 0;
-        let mut data = heapless::Vec::new();
+        let mut data = Vec::new();
 
         // Decode each endpoint entry
         while index < buff.len() {

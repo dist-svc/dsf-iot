@@ -7,7 +7,7 @@ use byteorder::{LittleEndian, ByteOrder};
 
 use dsf_core::prelude::*;
 use dsf_core::keys::{Keys, KeySource};
-use dsf_core::types::{ImmutableData, SIGNATURE_LEN};
+use dsf_core::types::{ImmutableData, SIGNATURE_LEN, MutableData};
 use dsf_core::wire::Container;
 
 bitflags::bitflags! {
@@ -61,7 +61,7 @@ pub trait Store: KeySource {
     fn store_page<T: ImmutableData>(&mut self, sig: &Signature, p: &Container<T>) -> Result<(), Self::Error>;
 
     // Fetch a stored page
-    fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error>;
+    fn fetch_page<T: MutableData>(&mut self, sig: &Signature, buff: T) -> Result<Option<Container<T>>, Self::Error>;
 }
 
 #[derive(Debug, Clone)]
@@ -184,9 +184,17 @@ pub mod memory_store {
             Ok(())
         }
 
-        fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error> {
-            let p = self.pages.get(sig).map(|p| p.clone() );
-            Ok(p)
+        fn fetch_page<T: MutableData>(&mut self, sig: &Signature, mut buff: T) -> Result<Option<Container<T>>, Self::Error> {
+            match self.pages.get(sig) {
+                Some(p) => {
+                    let b = buff.as_mut();
+                    b[..p.len()].copy_from_slice(p.raw());
+
+                    let (c, _n) = Container::from(buff);
+                    Ok(Some(c))
+                },
+                None => Ok(None),
+            }
         }
     }
 
@@ -335,12 +343,17 @@ pub mod sled_store {
             Ok(())
         }
 
-        fn fetch_page(&mut self, sig: &Signature) -> Result<Option<Container>, Self::Error> {
+        fn fetch_page<T: MutableData>(&mut self, sig: &Signature, mut buff: T) -> Result<Option<Container<T>>, Self::Error> {
             let pages = self.db.open_tree(SLED_PAGE_KEY)?;
 
             match pages.get(sig)? {
                 Some(p) => {
-                    let (c, _n) = Container::from(p.as_ref().to_vec());
+                    let b = buff.as_mut();
+                    let p = p.as_ref();
+
+                    b[..p.len()].copy_from_slice(p);
+
+                    let (c, _n) = Container::from(buff);
                     Ok(Some(c))
                 },
                 None => Ok(None),

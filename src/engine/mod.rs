@@ -69,20 +69,20 @@ pub enum EngineEvent {
 }
 
 #[derive(Debug, PartialEq)]
-enum EngineResponse {
+enum EngineResponse<T: ImmutableData = Vec<u8>> {
     None,
     Net(NetResponseBody),
-    Page(Container),
+    Page(Container<T>),
 }
 
-impl From<NetResponseBody> for EngineResponse {
+impl <T: ImmutableData> From<NetResponseBody> for EngineResponse<T> {
     fn from(r: NetResponseBody) -> Self {
         Self::Net(r)
     }
 }
 
-impl From<Container> for EngineResponse {
-    fn from(p: Container) -> Self {
+impl <T: ImmutableData> From<Container<T>> for EngineResponse<T> {
+    fn from(p: Container<T>) -> Self {
         Self::Page(p)
     }
 }
@@ -105,7 +105,7 @@ impl <V: PartialEq> Filter<V> for &[V] {
 
 impl <'a, Addr, App, Comms, Stor, const N: usize> Engine<App, Comms, Stor, N> 
 where
-    Addr: Clone + Debug, 
+    Addr: PartialEq + Clone + Debug, 
     App: Application,
     Comms: Communications<Address=Addr>, 
     Stor: Store<Address=Addr>,
@@ -157,6 +157,7 @@ where
 
 
         // Store page if possible
+        // TODO: we _really_ do need to keep the primary page for continued use...
         store.store_page(&sig, &p)
             .map_err(EngineError::Store)?;
 
@@ -168,6 +169,14 @@ where
 
     pub fn id(&self) -> Id {
         self.svc.id()
+    }
+
+    pub fn comms(&mut self) -> &mut Comms {
+        &mut self.comms
+    }
+
+    pub fn store(&mut self) -> &mut Stor {
+        &mut self.store
     }
 
     fn next_req_id(&mut self) -> u16 {
@@ -200,6 +209,49 @@ where
         self.comms.broadcast(c.raw()).map_err(EngineError::Comms)?;
 
         Ok(req_id)
+    }
+
+    pub fn register(&mut self, addr: &Addr) -> Result<Signature, EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
+
+        let buff = [0u8; N];
+
+        // Fetch or generate primary page
+        let primary_page = match self.store.fetch_page(&self.pri, buff).map_err(EngineError::Store)? {
+            Some(p) => p,
+            None => self.generate_primary()?,
+        };
+
+        // Transmit new page
+        self.comms.send(addr, primary_page.raw()).map_err(EngineError::Comms)?;
+
+        // Return signature
+        Ok(primary_page.signature())
+    }
+
+    fn generate_primary(&mut self) -> Result<Container<[u8; N]>, EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
+
+        // Generate page
+        let mut page_buff = [0u8; N];
+        let (_n, p) = self.svc.publish_primary(Default::default(), page_buff)
+            .map_err(EngineError::Core)?;
+        
+        let sig = p.signature();
+
+        trace!("Generated new page: {:?} sig: {}", p, sig);
+
+        // Update last signature in store
+        let published = ObjectInfo{page_index: p.header().index(), block_index: 0, sig: sig.clone()};
+        self.store.set_last(&published)
+            .map_err(EngineError::Store)?;
+
+        // Store page if possible
+        // TODO: we _really_ do need to keep the primary page for continued use...
+        self.store.store_page(&sig, &p)
+            .map_err(EngineError::Store)?;
+
+        self.pri = sig;
+
+        Ok(p)
     }
 
     /// Publish service data
@@ -293,8 +345,19 @@ where
         let mut flags = Flags::empty();
 
         // TODO: set pub_key request flag for unknown peers
+        let known_peer = self.store.peers().find(|(_k, v)| v.addr.as_ref() == Some(addr)).is_some();
 
-        let req = NetRequest::new(self.svc.id(), req_id, data, flags);
+        if !known_peer {
+            debug!("Unrecognised peer address, exchanging keys");
+            flags |= Flags::PUB_KEY_REQUEST;
+        }
+
+        let mut req = NetRequest::new(self.svc.id(), req_id, data, flags);
+
+        // Attach public key for unrecognised peers
+        if !known_peer {
+            req.set_public_key(self.svc.public_key())
+        }
 
         // TODO: include peer keys here if available
         let c = self.svc.encode_request_buff(&req, &Default::default())
@@ -327,6 +390,7 @@ where
         }
 
         let req_id = base.header().index();
+        let pub_key_requested = base.header().kind().is_request() && base.header().flags().contains(Flags::PUB_KEY_REQUEST);
 
         // Convert and handle messages
         let (resp, evt) = match base.header().kind().base() {
@@ -348,7 +412,12 @@ where
         match resp {
             EngineResponse::Net(net) => {
                 debug!("Sending response {:?} (id: {}) to: {:?}", net, req_id, from);
-                let r = NetResponse::new(self.svc.id(), req_id, net, Default::default());
+                let mut r = NetResponse::new(self.svc.id(), req_id, net, Default::default());
+
+                // Include public key in responses if requested
+                if pub_key_requested {
+                    r.set_public_key(self.svc.public_key());
+                }
 
                 // TODO: pass peer keys here
                 let c = self.svc.encode_response_buff(&r, &Default::default())
@@ -369,7 +438,7 @@ where
 
 
 
-    fn handle_req(&mut self, from: &Addr, req: NetRequest) -> Result<(EngineResponse, EngineEvent), EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
+    fn handle_req(&mut self, from: &Addr, req: NetRequest) -> Result<(EngineResponse<[u8; N]>, EngineEvent), EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
         use NetRequestBody::*;
 
         debug!("Received request: {:?} from: {} ({:?})", req, req.common.from, from);
@@ -390,7 +459,7 @@ where
         let mut evt = EngineEvent::None;
 
         // Handle request messages
-        let resp: EngineResponse = match &req.data {
+        let resp: EngineResponse<[u8; N]> = match &req.data {
             Hello | Ping => NetResponseBody::Status(Status::Ok).into(),
             Discover(body, options) => {
                 debug!("Received discovery from {} ({:?})", req.common.from, from);
@@ -421,9 +490,11 @@ where
                     EngineResponse::None
                     
                 } else {
+                    // TODO: check if page has expired and reissue if required
                     // Respond with page if filters pass
-                    match self.store.fetch_page(&self.pri) {
-                        Ok(Some(p)) => p.into(),
+                    let buff = [0u8; N];
+                    match self.store.fetch_page(&self.pri, buff) {
+                        Ok(Some(p)) => EngineResponse::Page(p),
                         _ => EngineResponse::None,
                     }
                 }
@@ -431,7 +502,8 @@ where
             Query(id) if id == &self.svc.id() => {
                 debug!("Sending service information to {} ({:?})", req.common.from, from);
 
-                if let Some(p) = self.store.fetch_page(&self.pri)
+                let buff = [0u8; N];
+                if let Some(p) = self.store.fetch_page(&self.pri, buff)
                         .map_err(EngineError::Store)? {
                     p.into()
                 } else {
@@ -471,7 +543,7 @@ where
         Ok((resp, evt))
     }
 
-    fn handle_resp(&mut self, from: &Addr, resp: NetResponse) -> Result<(EngineResponse, EngineEvent), EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
+    fn handle_resp(&mut self, from: &Addr, resp: NetResponse) -> Result<(EngineResponse<[u8; N]>, EngineEvent), EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
         //use NetResponseBody::*;
 
         debug!("Received response: {:?} from: {:?}", resp, from);
@@ -486,6 +558,19 @@ where
                 panic!();
             },
         };
+
+        // Update peer information if available...
+        // TODO: set short timeout if req.flags.contains(Flags::NO_PERSIST)
+        match resp.common.public_key {
+            Some(pub_key) => {
+                debug!("Update peer: {:?}", from);
+                self.store.update_peer(&resp.common.from, |p| {
+                    p.keys.pub_key = Some(pub_key.clone());
+                    p.addr = Some(from.clone());
+                }).map_err(EngineError::Store)?;
+            },
+            _ => (),
+        }
 
         // Handle response messages
         match (&peer.subscribed, &resp.data) {
@@ -536,7 +621,7 @@ where
         Ok((EngineResponse::None, evt))
     }
 
-    fn handle_page<T: ImmutableData>(&mut self, from: &Addr, page: Container<T>) -> Result<(EngineResponse, EngineEvent), EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
+    fn handle_page<T: ImmutableData>(&mut self, from: &Addr, page: Container<T>) -> Result<(EngineResponse<[u8; N]>, EngineEvent), EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
         debug!("Received page: {:?} from: {:?}", page, from);
 
         // Find matching peer for rx'd page
@@ -548,6 +633,8 @@ where
             // New primary page
             // TODO: only if discovering..?
             (None, Ok(PageInfo::Primary(pri))) => {
+                debug!("Discovered new service: {:?}", page.id());
+
                 // Write peer info to store
                 self.store.update_peer(&page.id(), |peer| {
                     peer.keys.pub_key = Some(pri.pub_key.clone());
@@ -563,16 +650,21 @@ where
             },
             // Updated primary page
             (Some(_peer), Ok(PageInfo::Primary(_pri))) => {
+                debug!("Update service: {:?}", page.id());
+
                 // TODO: update peer if page is newer?
                 (Status::Ok, EngineEvent::None)
             },
             // Data without subscription
             (Some(peer), Ok(PageInfo::Data(_data))) if !peer.subscribed() => {
                 warn!("Not subscribed to peer: {}", page.id());
+
                 (Status::InvalidRequest, EngineEvent::None)
             },
             // Data with subscription
             (Some(_peer), Ok(PageInfo::Data(_data))) => {
+                debug!("Received data for service: {:?}", page.id());
+
                 // TODO: store or propagate data here?
                 (Status::Ok, EngineEvent::ReceivedData(page.id(), page.signature()))
             },
@@ -711,7 +803,8 @@ mod test {
         let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
 
         // Check response
-        assert_eq!(resp, e.store.fetch_page(&e.pri).unwrap().unwrap().into());
+        let buff = [0u8; 512];
+        assert_eq!(resp, e.store.fetch_page(&e.pri, buff).unwrap().unwrap().into());
     }
 
 

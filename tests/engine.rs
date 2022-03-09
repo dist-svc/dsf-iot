@@ -34,7 +34,9 @@ fn new_engine(addr: &str, descriptors: Vec<EpDescriptor>) -> anyhow::Result<E> {
 #[test]
 fn integration() -> anyhow::Result<()> {
     // Setup debug logging
-    let log_cfg = simplelog::ConfigBuilder::new().add_filter_ignore_str("dsf_core::wire").build();
+    let log_cfg = simplelog::ConfigBuilder::new()
+        //.add_filter_ignore_str("dsf_core::wire")
+        .build();
     let _ =
         simplelog::SimpleLogger::init(simplelog::LevelFilter::Debug, log_cfg);
 
@@ -62,6 +64,7 @@ fn integration() -> anyhow::Result<()> {
     let (body, n) = ep_filter.encode_buff::<128>().unwrap();
     e1.discover(&body[..n], &[])?;
 
+    
     // Tick to update discovery state
     e1.tick()?;
     e2.tick()?;
@@ -69,6 +72,8 @@ fn integration() -> anyhow::Result<()> {
     e1.tick()?;
     e2.tick()?;
 
+    // TODO: broadcast doesn't seem to be working here..? 127.0.0.x address maybe?
+    // hack to fix for now
 
     info!("Starting subscribe");
 
