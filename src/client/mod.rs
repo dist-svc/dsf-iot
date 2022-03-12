@@ -222,11 +222,11 @@ impl IotClient {
     }
 
     pub fn generate() -> Result<(Id, Keys), ClientError> {
-        use dsf_core::crypto;
+        use dsf_core::crypto::{Crypto, PubKey as _, SecKey as _, Hash as _};
         
-        let (pub_key, pri_key) = crypto::new_pk()?;
-        let id = crypto::hash(&pub_key)?;
-        let sec_key = crypto::new_sk()?;
+        let (pub_key, pri_key) = Crypto::new_pk()?;
+        let id = Crypto::hash(&pub_key)?;
+        let sec_key = Crypto::new_sk()?;
 
         let keys = Keys{
             pub_key: Some(pub_key), 

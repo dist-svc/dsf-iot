@@ -9,6 +9,8 @@ use dsf_core::prelude::*;
 use dsf_core::keys::{Keys, KeySource};
 use dsf_core::types::{ImmutableData, SIGNATURE_LEN, MutableData};
 use dsf_core::wire::Container;
+use dsf_core::crypto::{Crypto, PubKey as _};
+
 
 bitflags::bitflags! {
     pub struct StoreFlags: u16 {
@@ -30,7 +32,7 @@ pub trait Store: KeySource {
     type Error: Debug;
 
     /// Peer iterator type, for collecting subscribers etc.
-    type Iter<'a>: Iterator<Item=(&'a Id, &'a Peer<Self::Address>)>;
+    type Iter<'a>: Iterator<Item=(&'a Id, &'a Peer<Self::Address>)> where Self: 'a;
 
 
     /// Fetch keys associated with this service
@@ -266,7 +268,7 @@ pub mod sled_store {
             if let Some(pri_key) = ident.get("pri_key")? {
                 let pri_key = PrivateKey::try_from(pri_key.as_ref()).unwrap();
 
-                keys.pub_key = Some(dsf_core::crypto::pk_derive(&pri_key).unwrap());
+                keys.pub_key = Some(Crypto::get_public(&pri_key));
                 keys.pri_key = Some(pri_key);
             }
 

@@ -17,10 +17,9 @@ pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
 
 /// [`Kind`] specifies the type of IoT endpoint, translated using the [`ENDPOINT_KINDS`] table
 /// For example: Temperature, Heart-Rate
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "strum", derive(strum::Display))]
-#[cfg_attr(feature = "strum", strum(serialize_all="snake_case"))]
+#[strum(serialize_all="snake_case")]
 pub enum Kind {
     /// Temperature in (degrees Celcius)
     Temperature,

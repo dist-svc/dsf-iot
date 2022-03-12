@@ -7,7 +7,6 @@ use dsf_core::{base::{PageBody, DataBody}, prelude::{Encode, Parse}, options::Me
 pub use kinds::*;
 
 pub mod value;
-use stor::Stor;
 pub use value::*;
 
 pub mod desc;

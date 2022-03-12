@@ -13,7 +13,7 @@ pub trait Communications {
     /// Address for directing packets
     type Address: Debug;
 
-    // Communication error type
+    /// Communication error type
     type Error: Debug;
 
     /// Receive data if available
@@ -52,7 +52,7 @@ impl <App: Application, S: Store<Address=std::net::SocketAddr>> Engine<App, std:
         // Check for and handle received messages
         if let Some((n, a)) = Communications::recv(&mut self.comms, &mut buff).map_err(EngineError::Comms)? {
             debug!("Received {} bytes from {:?}", n, a);
-            return self.handle(a, &buff[..n]);
+            return self.handle(a, &mut buff[..n]);
         }
 
         // Update internal state

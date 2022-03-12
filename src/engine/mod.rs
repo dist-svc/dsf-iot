@@ -69,7 +69,7 @@ pub enum EngineEvent {
 }
 
 #[derive(Debug, PartialEq)]
-enum EngineResponse<T: ImmutableData = Vec<u8>> {
+enum EngineResponse<T: ImmutableData> {
     None,
     Net(NetResponseBody),
     Page(Container<T>),
@@ -369,7 +369,7 @@ where
     }
 
     /// Handle received data
-    pub fn handle<T: ImmutableData>(&mut self, from: Addr, data: T) -> Result<EngineEvent, EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
+    pub fn handle<T: MutableData>(&mut self, from: Addr, data: T) -> Result<EngineEvent, EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
         debug!("Received {} bytes from {:?}", data.as_ref().len(), from);
 
         // Parse base object
@@ -835,7 +835,7 @@ mod test {
         assert_eq!(d.0, from);
 
         // Parse out page
-        let _b = Container::parse(&d.1, &e.svc.keys()).expect("Failed to parse object");
+        let _b = Container::parse(d.1, &e.svc.keys()).expect("Failed to parse object");
 
         // TODO: translate back to IoT data and check
 
