@@ -29,7 +29,7 @@ pub trait Communications {
 
 
 #[cfg(feature="std")]
-impl <App: Application, S: Store<Address=std::net::SocketAddr>> Engine<App, std::net::UdpSocket, S> {
+impl <App: Application, S: Store<Address=std::net::SocketAddr>, const N: usize> Engine<App, std::net::UdpSocket, S, N> {
     /// Create a new UDP engine instance
     pub fn udp<A: std::net::ToSocketAddrs + Debug>(info: App::Info, addr: A, store: S) -> Result<Self, EngineError<std::io::Error, <S as Store>::Error>> {
         debug!("Connecting to socket: {:?}", addr);
@@ -47,7 +47,7 @@ impl <App: Application, S: Store<Address=std::net::SocketAddr>> Engine<App, std:
 
     // Tick function to update engine
     pub fn tick(&mut self) -> Result<EngineEvent, EngineError<std::io::Error, <S as Store>::Error>> {
-        let mut buff = [0u8; 512];
+        let mut buff = [0u8; N];
 
         // Check for and handle received messages
         if let Some((n, a)) = Communications::recv(&mut self.comms, &mut buff).map_err(EngineError::Comms)? {

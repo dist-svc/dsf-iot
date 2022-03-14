@@ -4,7 +4,7 @@ use core::convert::TryFrom;
 use dsf_core::api::Application;
 use dsf_core::types::{ImmutableData, BaseKind};
 use dsf_core::wire::Container;
-use log::{trace, debug, info, warn, error};
+use crate::log::{trace, debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
 use dsf_core::base::{Parse, DataBody, PageBody};
@@ -32,13 +32,21 @@ pub struct Engine<App: Application, Comms: Communications, Stor: Store, const N:
 
     comms: Comms,
     store: Stor,
+}
+pub trait Allocator {
 
-    on_rx: Option<&'static mut dyn FnMut(&Container)>,
+}
+
+pub struct Alloc;
+
+impl Allocator for Alloc {
+
 }
 
 
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature="thiserror", derive(thiserror::Error))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum EngineError<CommsError: Debug, StoreError: Debug> {
 
     #[cfg_attr(feature="thiserror", error("core: {0:?}"))]
@@ -58,6 +66,7 @@ pub enum EngineError<CommsError: Debug, StoreError: Debug> {
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum EngineEvent {
     None,
     Discover(Id),
@@ -69,6 +78,7 @@ pub enum EngineEvent {
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum EngineResponse<T: ImmutableData> {
     None,
     Net(NetResponseBody),
@@ -105,7 +115,7 @@ impl <V: PartialEq> Filter<V> for &[V] {
 
 impl <'a, Addr, App, Comms, Stor, const N: usize> Engine<App, Comms, Stor, N> 
 where
-    Addr: PartialEq + Clone + Debug, 
+    Addr: PartialEq + Clone + Debug,
     App: Application,
     Comms: Communications<Address=Addr>, 
     Stor: Store<Address=Addr>,
@@ -164,7 +174,7 @@ where
         // TODO: setup forward to subscribers?
 
         // Return object
-        Ok(Self{ svc, pri: sig, req_id: 0, comms, store, on_rx: None })
+        Ok(Self{ svc, pri: sig, req_id: 0, comms, store })
     }
 
     pub fn id(&self) -> Id {
@@ -182,10 +192,6 @@ where
     fn next_req_id(&mut self) -> u16 {
         self.req_id = self.req_id.wrapping_add(1);
         self.req_id
-    }
-
-    pub fn set_handler(&mut self, on_rx: &'static mut dyn FnMut(&Container)) {
-        self.on_rx = Some(on_rx);
     }
 
     /// Discover local services
@@ -279,6 +285,7 @@ where
             sig: sig.clone(),
         };
 
+        #[cfg(not(feature = "defmt"))]
         debug!("Publishing object: {:02x?}", p);
 
         // Update last sig
@@ -380,7 +387,8 @@ where
                 return Err(EngineError::Core(e))
             }
         };
-
+        
+        #[cfg(not(feature = "defmt"))]
         debug!("Received object: {:02x?}", base);
 
         // Ignore our own packets
@@ -577,7 +585,10 @@ where
             // Subscribe responses
             (SubscribeState::Subscribing(id), NetResponseBody::Status(st)) if req_id == *id => {
                 if *st == Status::Ok {
+                    #[cfg(not(feature = "defmt"))]
                     info!("Subscribe ok for {} ({:?})", resp.common.from, from);
+                    #[cfg(feature = "defmt")]
+                    info!("Subscribe ok for {} ({:?})", resp.common.from, defmt::Debug2Format(&from));
 
                     let p = self.store.update_peer(&resp.common.from, |p| {
                         p.subscribed = SubscribeState::Subscribed;
@@ -587,14 +598,20 @@ where
                     p
 
                 } else {
+                    #[cfg(not(feature = "defmt"))]
                     info!("Subscribe failed for {} ({:?})", resp.common.from, from);
+                    #[cfg(feature = "defmt")]
+                    info!("Subscribe failed for {} ({:?})", resp.common.from, defmt::Debug2Format(&from));
 
                 }
             },
             // Unsubscribe response
             (SubscribeState::Unsubscribing(id), NetResponseBody::Status(st)) if req_id == *id => {
                 if *st == Status::Ok {
+                    #[cfg(not(feature = "defmt"))]
                     info!("Unsubscribe ok for {} ({:?})", resp.common.from, from);
+                    #[cfg(feature = "defmt")]
+                    info!("Unsubscribe ok for {} ({:?})", resp.common.from, defmt::Debug2Format(&from));
 
                     let p = self.store.update_peer(&resp.common.from, |p| {
                         p.subscribed = SubscribeState::None;
@@ -604,7 +621,10 @@ where
                     p
 
                 } else {
+                    #[cfg(not(feature = "defmt"))]
                     info!("Unsubscribe failed for {} ({:?})", resp.common.from, from);
+                    #[cfg(feature = "defmt")]
+                    info!("Unsubscribe failed for {} ({:?})", resp.common.from, defmt::Debug2Format(&from));
 
                 }
             },
@@ -674,11 +694,6 @@ where
                 (Status::InvalidRequest, EngineEvent::None)
             },
         };
-
-        // Call receive handler
-        if let Some(on_rx) = self.on_rx.as_mut() {
-            (on_rx)(&page.to_owned());
-        }
 
         // Respond with OK
         Ok((NetResponseBody::Status(status).into(), evt))

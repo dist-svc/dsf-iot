@@ -61,3 +61,13 @@ impl Application for IoT {
 
 /// IoT type for engine instances
 pub type IotEngine<Comms, Stor, const N: usize = 512> = Engine<IoT, Comms, Stor, N>;
+
+#[cfg(feature = "defmt")]
+mod log {
+    pub use defmt::{trace, debug, info, warn, error};
+}
+
+#[cfg(not(feature = "defmt"))]
+mod log {
+    pub use log::{trace, debug, info, warn, error};
+}

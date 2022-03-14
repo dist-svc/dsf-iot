@@ -20,6 +20,8 @@ pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
 #[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[strum(serialize_all="snake_case")]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+
 pub enum Kind {
     /// Temperature in (degrees Celcius)
     Temperature,
@@ -40,8 +42,7 @@ pub enum Kind {
 }
 
 /// Parse an endpoint kind from a string
-#[cfg(feature = "std")]
-pub fn parse_endpoint_kind(src: &str) -> Result<Kind, String> {
+pub fn parse_endpoint_kind(src: &str) -> Result<Kind, &str> {
     // Coerce to lower case
     let src = src.to_lowercase();
 
@@ -55,11 +56,7 @@ pub fn parse_endpoint_kind(src: &str) -> Result<Kind, String> {
         return Ok(Kind::Unknown(v));
     }
 
-    Err(format!(
-        "Unrecognised endpoint kind '{}' (options: {})",
-        src,
-        Kind::variants()
-    ))
+    Err("Unrecognised endpoint kind")
 }
 
 impl Kind {

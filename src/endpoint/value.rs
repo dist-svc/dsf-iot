@@ -10,6 +10,8 @@ pub trait StringIsh = AsRef<str> + Debug;
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+
 pub enum Value<S: StringIsh= String, B: BytesIsh = Vec<u8>> {
     /// Boolean value
     Bool(bool),
@@ -26,7 +28,7 @@ pub enum Value<S: StringIsh= String, B: BytesIsh = Vec<u8>> {
 /// Value with reference body
 pub type ValueRef<'a> = Value<&'a str, &'a [u8]>;
 
-#[cfg(feature="alloc")]
+#[cfg(any(feature="alloc", feature="std"))]
 /// Value with owned body
 pub type ValueOwned = Value<String, Vec<u8>>;
 
@@ -54,7 +56,7 @@ impl <B: BytesIsh> From<String> for Value<String, B> {
     }
 }
 
-#[cfg(feature="alloc")]
+#[cfg(any(feature="alloc", feature = "std"))]
 impl <S: AsRef<str> + Debug> From<Vec<u8>> for Value<S, Vec<u8>> {
     fn from(v: Vec<u8>) -> Self {
         Self::Bytes(v)
@@ -74,7 +76,7 @@ impl <S: AsRef<str> + Debug, B: BytesIsh> core::fmt::Display for Value<S, B> {
     }
 }
 
-#[cfg(feature="alloc")]
+#[cfg(any(feature="alloc", feature = "std"))]
 impl FromStr for Value<String, Vec<u8>> {
     type Err = String;
 
@@ -99,7 +101,7 @@ impl FromStr for Value<String, Vec<u8>> {
 }
 
 /// Helper to parse endpoint data from string values
-#[cfg(feature="alloc")]
+#[cfg(any(feature="alloc", feature = "std"))]
 pub(crate) fn parse_endpoint_value(src: &str) -> Result<Value, String> {
     Value::from_str(src)
 }

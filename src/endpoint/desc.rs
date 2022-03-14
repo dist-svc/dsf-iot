@@ -34,6 +34,7 @@ pub mod iot_option_kinds {
 
 bitflags::bitflags! {
     #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct Flags: u16 {
         /// Read flag
         const R = 0b0000_0001;
@@ -48,6 +49,8 @@ bitflags::bitflags! {
 /// An endpoint descriptor defines the kind of an endpoint
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+
 pub struct Descriptor<M: stor::Stor<Metadata> + Debug = stor::Owned> {
     /// Endpoint Kind
     pub kind: Kind,
@@ -83,7 +86,7 @@ impl <M: stor::Stor<Metadata> + Debug> Descriptor<M> {
         }
     }
 
-    #[cfg(feature = "alloc")]
+    #[cfg(any(feature = "alloc", feature="std"))]
     pub fn display(eps: &[Descriptor<M>]) -> String {
         let mut s = String::new();
 
@@ -160,8 +163,7 @@ impl dsf_core::base::Parse for Descriptor {
 }
 
 
-#[cfg(feature = "std")]
-pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, String> {
+pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, &str> {
     let kind = parse_endpoint_kind(src)?;
     Ok(Descriptor::new(kind, Flags::empty(), vec![]))
 }
@@ -169,6 +171,7 @@ pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, String> {
 
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Data<C: stor::Stor<Metadata> = stor::Owned> {
     // Measurement value
     pub value: Value<C::String, C::Bytes>,

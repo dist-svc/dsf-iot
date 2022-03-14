@@ -73,7 +73,7 @@ async fn main() -> Result<(), anyhow::Error> {
         },
         Command::Discover(_opts) => {
             // Create transient service
-            let mut engine = IotEngine::udp(IotInfo::new(&[]).unwrap(), "0.0.0.0:10100", MemoryStore::new())?;
+            let mut engine = IotEngine::<_, _, 512>::udp(IotInfo::new(&[]).unwrap(), "0.0.0.0:10100", MemoryStore::new())?;
 
             info!("Starting discovery from: {}", engine.id());
 

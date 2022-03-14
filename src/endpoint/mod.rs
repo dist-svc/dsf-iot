@@ -1,8 +1,10 @@
 
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
 
 pub mod kinds;
+use byteorder::{LittleEndian, ByteOrder};
 use dsf_core::{base::{PageBody, DataBody}, prelude::{Encode, Parse}, options::Metadata};
 pub use kinds::*;
 
@@ -14,9 +16,9 @@ pub use desc::*;
 
 use crate::prelude::IotError;
 
-const MAX_EPS: usize = 10;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct IotInfo {
     pub descriptors: Vec<Descriptor>,
 }
@@ -82,6 +84,7 @@ impl Parse for IotInfo{
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct IotData {
     /// Measurement values (these must correspond with service endpoints)
     pub data: Vec<Data>,

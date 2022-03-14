@@ -60,7 +60,7 @@ fn main() -> Result<(), anyhow::Error> {
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut engine = match IotEngine::udp(descriptors, "127.0.0.1:0", store) {
+    let mut engine = match IotEngine::<_, _, 512>::udp(descriptors, "127.0.0.1:0", store) {
         Ok(e) => e,
         Err(e) => {
             return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));
