@@ -75,9 +75,9 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Setup service
     let descriptors = IotInfo::new(&[
-        EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![]),
-        EpDescriptor::new(EpKind::Co2, EpFlags::R, vec![]),
-        EpDescriptor::new(EpKind::Humidity, EpFlags::R, vec![]),
+        EpDescriptor::new(EpKind::Temperature, EpFlags::R),
+        EpDescriptor::new(EpKind::Co2, EpFlags::R),
+        EpDescriptor::new(EpKind::Humidity, EpFlags::R,),
     ]).map_err(|_| anyhow::anyhow!("Descriptor allocation failed") )?;
 
     // TODO: split service and engine setup better
@@ -137,9 +137,9 @@ fn main() -> Result<(), anyhow::Error> {
 
         // Save the new measurement
         let data = IotData::new(&[
-            EpData::new(m.temp.into(), vec![]),
-            EpData::new(m.co2.into(), vec![]),
-            EpData::new(m.rh.into(), vec![]),
+            EpData::new(m.temp.into()),
+            EpData::new(m.co2.into()),
+            EpData::new(m.rh.into()),
         ]).map_err(|_| anyhow::anyhow!("Data allocation failed") )?;
 
         info!("Measurement: {:?}", data);

@@ -52,9 +52,9 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Setup service
     let descriptors = IotInfo::new(&[
-        EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![]),
-        EpDescriptor::new(EpKind::Pressure, EpFlags::R, vec![]),
-        EpDescriptor::new(EpKind::Humidity, EpFlags::R, vec![]),
+        EpDescriptor::new(EpKind::Temperature, EpFlags::R),
+        EpDescriptor::new(EpKind::Pressure, EpFlags::R),
+        EpDescriptor::new(EpKind::Humidity, EpFlags::R),
     ]).unwrap();
 
     // TODO: split service and engine setup better
@@ -94,9 +94,9 @@ fn main() -> Result<(), anyhow::Error> {
         let m = bme280.measure().unwrap();
 
         let data = IotData::new(&[
-            EpData::new(m.temperature.into(), vec![]),
-            EpData::new((m.pressure / 1000.0).into(), vec![]),
-            EpData::new(m.humidity.into(), vec![]),
+            EpData::new(m.temperature.into()),
+            EpData::new((m.pressure / 1000.0).into()),
+            EpData::new(m.humidity.into()),
         ]).unwrap();
 
         println!("Measurement: {:?}", data);

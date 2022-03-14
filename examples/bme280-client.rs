@@ -11,7 +11,6 @@ use tracing::{debug, info, error};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_core::options::Metadata;
 use dsf_iot::prelude::*;
 
 #[derive(Debug, StructOpt)]
@@ -70,9 +69,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let s = c
                 .create(CreateOptions {
                     endpoints: vec![
-                        EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![]),
-                        EpDescriptor::new(EpKind::Pressure, EpFlags::R, vec![]),
-                        EpDescriptor::new(EpKind::Humidity, EpFlags::R, vec![]),
+                        EpDescriptor::new(EpKind::Temperature, EpFlags::R),
+                        EpDescriptor::new(EpKind::Pressure, EpFlags::R),
+                        EpDescriptor::new(EpKind::Humidity, EpFlags::R),
                     ],
                     ..Default::default()
                 })
@@ -103,9 +102,9 @@ async fn main() -> Result<(), anyhow::Error> {
         let m = bme280.measure().unwrap();
 
         let data = vec![
-            EpData::new(m.temperature.into(), vec![]),
-            EpData::new((m.pressure / 1000.0).into(), vec![]),
-            EpData::new(m.humidity.into(), vec![]),
+            EpData::new(m.temperature.into()),
+            EpData::new((m.pressure / 1000.0).into()),
+            EpData::new(m.humidity.into()),
         ];
 
         println!("Measurement: {:?}", data);

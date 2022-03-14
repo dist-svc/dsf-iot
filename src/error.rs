@@ -1,5 +1,6 @@
 #[derive(Debug)]
 #[cfg_attr(feature="thiserror", derive(thiserror::Error))]
+#[cfg_attr(feature="defmt", derive(defmt::Format))]
 pub enum IotError {
     #[cfg_attr(feature="thiserror", error("core error: {0}"))]
     Core(dsf_core::error::Error),

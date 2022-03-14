@@ -7,7 +7,7 @@ edition = "2018"
 
 [features]
 
-defmt-default = [ "defmt", "dsf-core/defmt" ]
+defmt-default = [ "defmt", "dsf-core/defmt", "heapless/defmt-impl" ]
 
 client = ["std", "async-std", "serde", "futures", "dsf-rpc", "dsf-client", "chrono-english", "chrono", "tracing", "tracing-subscriber", "humantime", "anyhow", "thiserror" ]
 util = [ "client", "structopt", "dsf-core/structopt" ]

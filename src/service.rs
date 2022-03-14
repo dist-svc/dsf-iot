@@ -6,7 +6,6 @@ use core::convert::TryFrom;
 use alloc::{vec::Vec, string::String};
 
 use dsf_core::base::{Body, Parse, Encode, DataBody, PageBody};
-use dsf_core::options::Metadata;
 use dsf_core::types::*;
 use dsf_core::wire::Container;
 

@@ -1,17 +1,13 @@
 use core::fmt::{Debug};
-use core::marker::PhantomData;
+use core::ops::Deref;
+use core::convert::TryFrom;
 
-#[cfg(feature = "alloc")]
-use alloc::{vec::Vec, string::{String, ToString}, borrow::ToOwned};
-
-use dsf_core::base::PageBody;
-use dsf_core::prelude::Encode;
 use dsf_core::error::Error;
-use dsf_core::options::Metadata;
 
 use log::{error, trace, warn};
 
 use byteorder::{ByteOrder, NetworkEndian};
+use heapless::{String};
 
 //use modular_bitfield::prelude::*;
 
@@ -51,15 +47,12 @@ bitflags::bitflags! {
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 
-pub struct Descriptor<M: stor::Stor<Metadata> + Debug = stor::Owned> {
+pub struct Descriptor {
     /// Endpoint Kind
     pub kind: Kind,
 
     /// Endpoint flags
     pub flags: Flags,
-
-    /// Endpoint metadata
-    pub meta: M::List,
 }
 
 pub struct Descriptor2<T: Debug> {
@@ -77,37 +70,23 @@ trait Descriptor3 {
 
 
 
-impl <M: stor::Stor<Metadata> + Debug> Descriptor<M> {
-    pub fn new(kind: Kind, flags: Flags, meta: M::List) -> Self {
+impl Descriptor {
+    pub fn new(kind: Kind, flags: Flags) -> Self {
         Self {
             kind,
             flags,
-            meta,
         }
-    }
-
-    #[cfg(any(feature = "alloc", feature="std"))]
-    pub fn display(eps: &[Descriptor<M>]) -> String {
-        let mut s = String::new();
-
-        s.push_str("Endpoints: \r\n");
-        for i in 0..eps.len() {
-            let e = &eps[i];
-            s.push_str(&format!("  - {:2}: {:16} in {:4} (metadata: {:?})\r\n", i, e.kind, e.kind.unit(), e.meta));
-        }
-
-        s
     }
 }
 
-impl <M: stor::Stor<Metadata> + Debug> core::fmt::Display for Descriptor<M> {
+impl core::fmt::Display for Descriptor {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{:16} in {:4} (metadata: {:?})\r\n", self.kind, self.kind.unit(), self.meta)
+        write!(f, "{:16} in {:4}\r\n", self.kind, self.kind.unit())
     }
 }
 
 
-impl <M: stor::Stor<Metadata>> dsf_core::base::Encode for Descriptor<M> {
+impl dsf_core::base::Encode for Descriptor {
     type Error = Error;
 
     fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
@@ -155,7 +134,6 @@ impl dsf_core::base::Parse for Descriptor {
             Self {
                 kind,
                 flags,
-                meta: Vec::new(),
             },
             len as usize,
         ))
@@ -165,37 +143,29 @@ impl dsf_core::base::Parse for Descriptor {
 
 pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, &str> {
     let kind = parse_endpoint_kind(src)?;
-    Ok(Descriptor::new(kind, Flags::empty(), vec![]))
+    Ok(Descriptor::new(kind, Flags::empty()))
 }
 
 
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Data<C: stor::Stor<Metadata> = stor::Owned> {
+pub struct Data {
     // Measurement value
-    pub value: Value<C::String, C::Bytes>,
-
-    /// Measurement metadata
-    pub meta: C::List,
+    pub value: Value,
 }
 
-pub type DataRef<'a> = Data<stor::Ref<'a>>;
-
-pub type DataOwned = Data<stor::Owned>;
-
-impl <C: stor::Stor<Metadata>> Data<C> {
-    pub fn new(value: Value<C::String, C::Bytes>, meta: C::List) -> Self {
+impl Data {
+    pub fn new(value: Value) -> Self {
         Self {
             value,
-            meta,
         }
     }
 }
 
-impl dsf_core::base::Parse for DataOwned {
+impl dsf_core::base::Parse for Data {
     type Error = Error;
-    type Output = DataOwned;
+    type Output = Data;
 
     fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         use iot_option_kinds::*;
@@ -217,11 +187,12 @@ impl dsf_core::base::Parse for DataOwned {
             }
             VALUE_STRING => {
                 let s = core::str::from_utf8(&buff[4..]).unwrap();
-                Value::Text(s.to_owned())
+                Value::Text(String::from(s))
             }
             VALUE_RAW => {
                 let s = &buff[4..][..len as usize];
-                Value::Bytes(s.to_owned())
+                Value::try_from(s)
+                    .map_err(|_| Error::InvalidOption )?
             }
             _ => {
                 error!("Unrecognised option kind: 0x{:x?}", kind);
@@ -234,7 +205,6 @@ impl dsf_core::base::Parse for DataOwned {
         Ok((
             Self {
                 value,
-                meta: Vec::new(),
             },
             len as usize + 4,
         ))
@@ -242,7 +212,7 @@ impl dsf_core::base::Parse for DataOwned {
 }
 
 
-impl <C: stor::Stor<Metadata>> dsf_core::base::Encode for Data<C> {
+impl dsf_core::base::Encode for Data {
     type Error = Error;
 
     fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
@@ -273,7 +243,7 @@ impl <C: stor::Stor<Metadata>> dsf_core::base::Encode for Data<C> {
                 8
             }
             Value::Text(v) => {
-                let b = v.as_ref().as_bytes();
+                let b = v.deref().as_bytes();
 
                 NetworkEndian::write_u16(&mut buff[0..], VALUE_STRING);
                 NetworkEndian::write_u16(&mut buff[2..], b.len() as u16);
@@ -281,12 +251,10 @@ impl <C: stor::Stor<Metadata>> dsf_core::base::Encode for Data<C> {
                 4 + b.len()
             }
             Value::Bytes(v) => {
-                let b = v.as_ref();
-
                 NetworkEndian::write_u16(&mut buff[0..], VALUE_RAW);
-                NetworkEndian::write_u16(&mut buff[2..], b.len() as u16);
-                (&mut buff[4..4 + b.len()]).copy_from_slice(b);
-                4 + b.len()
+                NetworkEndian::write_u16(&mut buff[2..], v.len() as u16);
+                (&mut buff[4..4 + v.len()]).copy_from_slice(&v);
+                4 + v.len()
             }
             _ => unimplemented!("Encode not yet implemented for value: {:?}", self),
         };
@@ -297,9 +265,9 @@ impl <C: stor::Stor<Metadata>> dsf_core::base::Encode for Data<C> {
     }
 }
 
-pub fn parse_endpoint_data(src: &str) -> Result<DataOwned, String> {
+pub fn parse_endpoint_data(src: &str) -> Result<Data, &str> {
     let value = parse_endpoint_value(src)?;
-    Ok(Data::new(value, vec![]))
+    Ok(Data::new(value))
 }
 
 #[cfg(test)]
@@ -314,17 +282,14 @@ mod tests {
             Descriptor {
                 kind: Kind::Temperature,
                 flags: Flags::R,
-                meta: vec![],
             },
             Descriptor {
                 kind: Kind::Pressure,
                 flags: Flags::W,
-                meta: vec![],
             },
             Descriptor {
                 kind: Kind::Humidity,
                 flags: Flags::RW,
-                meta: vec![],
             },
         ];
 
@@ -346,15 +311,12 @@ mod tests {
         let data = vec![
             Data {
                 value: Value::Bool(true),
-                meta: vec![],
             },
             Data {
                 value: Value::Bool(false),
-                meta: vec![],
             },
             Data {
                 value: Value::Float32(10.45),
-                meta: vec![],
             },
         ];
 

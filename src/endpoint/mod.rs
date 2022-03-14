@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 pub mod kinds;
 use byteorder::{LittleEndian, ByteOrder};
-use dsf_core::{base::{PageBody, DataBody}, prelude::{Encode, Parse}, options::Metadata};
+use dsf_core::{base::{PageBody, DataBody}, prelude::{Encode, Parse}};
 pub use kinds::*;
 
 pub mod value;
@@ -36,7 +36,7 @@ impl core::fmt::Display for IotInfo {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for i in 0..self.descriptors.len() {
             let e = &self.descriptors[i];
-            writeln!(f, "  - {:2}: {:16} in {:4} (metadata: {:?})", i, e.kind, e.kind.unit(), e.meta)?;
+            writeln!(f, "  - {:2}: {:16} in {:4}", i, e.kind, e.kind.unit())?;
         }
         Ok(())
     }
@@ -104,7 +104,7 @@ impl core::fmt::Display for IotData {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for i in 0..self.data.len() {
             let e = &self.data[i];
-            writeln!(f, "  - {:2}: {:4} (metadata: {:?})", i, e.value, e.meta)?;
+            writeln!(f, "  - {:2}: {:4}", i, e.value)?;
         }
         Ok(())
     }
