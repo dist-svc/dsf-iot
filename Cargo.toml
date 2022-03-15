@@ -13,7 +13,7 @@ client = ["std", "async-std", "serde", "futures", "dsf-rpc", "dsf-client", "chro
 util = [ "client", "structopt", "dsf-core/structopt" ]
 
 std = [ "dsf-core/std", "dsf-rpc", "dsf-client", "thiserror", "sled" ]
-alloc = [ "dsf-core/alloc", "pretty-hex/alloc", "defmt/alloc" ]
+alloc = [ "dsf-core/alloc", "pretty-hex/alloc" ]
 
 default = [ "client", "util", "std", "dsf-rpc" ]
 

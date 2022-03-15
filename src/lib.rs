@@ -65,9 +65,13 @@ pub type IotEngine<Comms, Stor, const N: usize = 512> = Engine<IoT, Comms, Stor,
 #[cfg(feature = "defmt")]
 mod log {
     pub use defmt::{trace, debug, info, warn, error};
+
+    pub trait Debug = core::fmt::Debug + defmt::Format;
 }
 
 #[cfg(not(feature = "defmt"))]
 mod log {
     pub use log::{trace, debug, info, warn, error};
+
+    pub trait Debug = core::fmt::Debug;
 }

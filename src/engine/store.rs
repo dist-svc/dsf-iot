@@ -1,5 +1,5 @@
 
-use core::fmt::Debug;
+
 use core::convert::TryFrom;
 use core::marker::PhantomData;
 
@@ -10,6 +10,8 @@ use dsf_core::keys::{Keys, KeySource};
 use dsf_core::types::{ImmutableData, SIGNATURE_LEN, MutableData};
 use dsf_core::wire::Container;
 use dsf_core::crypto::{Crypto, PubKey as _};
+
+use crate::log::Debug;
 
 
 bitflags::bitflags! {
@@ -67,6 +69,7 @@ pub trait Store: KeySource {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectInfo {
     pub page_index: u16,
     pub block_index: u16,
@@ -74,6 +77,7 @@ pub struct ObjectInfo {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Peer<Addr: Clone + Debug> {
     pub keys: Keys,                     // Key storage for the peer / service
     pub addr: Option<Addr>,             // Optional address for the peer / service
@@ -93,6 +97,7 @@ impl <Addr: Clone + Debug> Default for Peer<Addr> {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SubscribeState {
     None,
     Subscribing(RequestId),
@@ -116,9 +121,8 @@ impl <Addr: Clone + Debug> Peer<Addr> {
 
 #[cfg(feature="std")]
 pub mod memory_store {
-    use core::fmt::Debug;
-
     use dsf_core::prelude::*;
+    use crate::log::Debug;
 
     use super::*;
 
@@ -220,10 +224,9 @@ pub mod memory_store {
 
 #[cfg(feature="sled")]
 pub mod sled_store {
-    use core::fmt::Debug;
-
     use dsf_core::prelude::*;
 
+    use crate::log::Debug;
     use super::*;
 
     pub struct SledStore<Addr: Clone + Debug> {

@@ -1,14 +1,13 @@
-use core::fmt::{Debug};
 use core::convert::TryFrom;
 
 use dsf_core::api::Application;
 use dsf_core::types::{ImmutableData, BaseKind};
 use dsf_core::wire::Container;
-use crate::log::{trace, debug, info, warn, error};
+use crate::log::{Debug, trace, debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
 use dsf_core::base::{Parse, DataBody, PageBody};
-
+use dsf_core::service::Net;
 
 mod store;
 pub use store::*;
@@ -207,7 +206,7 @@ where
         debug!("Broadcasting discovery request: {:?}", req);
 
         // Sending discovery request
-        let c = self.svc.encode_request_buff(&req, &Default::default())
+        let c = Net::<N>::encode_request_buff(&mut self.svc, &req, &Default::default())
                 .map_err(EngineError::Core)?;
 
         trace!("Container: {:?}", c);
@@ -237,7 +236,7 @@ where
     fn generate_primary(&mut self) -> Result<Container<[u8; N]>, EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
 
         // Generate page
-        let mut page_buff = [0u8; N];
+        let page_buff = [0u8; N];
         let (_n, p) = self.svc.publish_primary(Default::default(), page_buff)
             .map_err(EngineError::Core)?;
         
@@ -337,6 +336,13 @@ where
 
     /// Update internal state
     pub fn update(&mut self) -> Result<EngineEvent, EngineError<<Comms as Communications>::Error, <Stor as Store>::Error>> {
+        let mut buff = [0u8; N];
+
+        // Check for and handle received messages
+        if let Some((n, a)) = Communications::recv(&mut self.comms, &mut buff).map_err(EngineError::Comms)? {
+            debug!("Received {} bytes from {:?}", n, a);
+            return self.handle(a, &mut buff[..n]);
+        }
 
         // TODO: regenerate primary page if required
 
@@ -367,7 +373,7 @@ where
         }
 
         // TODO: include peer keys here if available
-        let c = self.svc.encode_request_buff(&req, &Default::default())
+        let c = Net::<N>::encode_request_buff(&mut self.svc, &req, &Default::default())
                 .map_err(EngineError::Core)?;
 
         self.comms.send(&addr, c.raw()).map_err(EngineError::Comms)?;
@@ -428,7 +434,7 @@ where
                 }
 
                 // TODO: pass peer keys here
-                let c = self.svc.encode_response_buff(&r, &Default::default())
+                let c = Net::<N>::encode_response_buff(&mut self.svc, &r, &Default::default())
                     .map_err(EngineError::Core)?;
                 
                 self.comms.send(&from, c.raw()).map_err(EngineError::Comms)?;
@@ -562,9 +568,7 @@ where
         // Find matching peer for response
         let peer = match self.store.get_peer(&resp.common.from).map_err(EngineError::Store)? {
             Some(p) => p,
-            None => {
-                panic!();
-            },
+            None => Peer{ addr: Some(from.clone()), ..Default::default() },
         };
 
         // Update peer information if available...

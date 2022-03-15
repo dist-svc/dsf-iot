@@ -1,9 +1,8 @@
 
-use core::fmt::Debug;
 
 use dsf_core::{base::PageBody, api::Application};
-use log::debug;
 
+use crate::log::{Debug, trace, debug, info, warn, error};
 use crate::prelude::EpDescriptor;
 
 use super::{Engine, Store, EngineError, EngineEvent};
