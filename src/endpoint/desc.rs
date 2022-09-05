@@ -55,21 +55,6 @@ pub struct Descriptor {
     pub flags: Flags,
 }
 
-pub struct Descriptor2<T: Debug> {
-    t: T,
-}
-
-impl Descriptor2<&[u8]> {
-
-}
-
-trait Descriptor3 {
-
-}
-
-
-
-
 impl Descriptor {
     pub fn new(kind: Kind, flags: Flags) -> Self {
         Self {

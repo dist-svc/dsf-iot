@@ -119,7 +119,7 @@ pub struct PublishOptions {
 
     /// Measurement values (these must correspond with service endpoints)
     #[structopt(short, long, parse(try_from_str = parse_endpoint_data))]
-    pub data: Vec<ep::DataOwned>,
+    pub data: Vec<ep::Data>,
 
     /// Measurement metadata
     #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
@@ -133,7 +133,7 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
     fn try_into(self) -> Result<dsf_rpc::PublishOptions, Self::Error> {
         let mut body = BytesMut::new();
 
-        let data = IotData::new(&self.data)
+        let data = IotData::<8>::new(&self.data)
             .map_err(|_| IotError::Overrun )?;
 
         let n = data.encode(&mut body)?;

@@ -42,9 +42,9 @@ fn integration() -> anyhow::Result<()> {
 
     // Setup descriptors
     let descriptors = vec![
-        EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![]),
-        EpDescriptor::new(EpKind::Pressure, EpFlags::R, vec![]),
-        EpDescriptor::new(EpKind::Humidity, EpFlags::R, vec![]),
+        EpDescriptor::new(EpKind::Temperature, EpFlags::R),
+        EpDescriptor::new(EpKind::Pressure, EpFlags::R),
+        EpDescriptor::new(EpKind::Humidity, EpFlags::R),
     ];
 
     // Create a pair of engines
@@ -60,7 +60,7 @@ fn integration() -> anyhow::Result<()> {
     info!("Attempting discovery");
 
     // Attempt local service discovery
-    let ep_filter: &[EpDescriptor] = &[EpDescriptor::new(EpKind::Temperature, EpFlags::R, vec![])];
+    let ep_filter: &[EpDescriptor] = &[EpDescriptor::new(EpKind::Temperature, EpFlags::R)];
     let (body, n) = ep_filter.encode_buff::<128>().unwrap();
     e1.discover(&body[..n], &[])?;
 
@@ -90,9 +90,9 @@ fn integration() -> anyhow::Result<()> {
     info!("Publishing data");
 
     let data = IotData::new(&[
-        EpData::new(27.3.into(), vec![]),
-        EpData::new(1016.2.into(), vec![]),
-        EpData::new(59.6.into(), vec![]),
+        EpData::new(27.3.into()),
+        EpData::new(1016.2.into()),
+        EpData::new(59.6.into()),
     ]).unwrap();
 
     let sig = e2.publish(data, &[])?;

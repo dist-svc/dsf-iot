@@ -163,7 +163,7 @@ fn print_service_list(services: &[IotService]) {
         for i in 0..s.endpoints.len() {
             let e = &s.endpoints[i];
 
-            println!("  - {:2}: {:16} in {:4} (metadata: {:?})", i, e.kind, e.kind.unit(), e.meta);
+            println!("  - {:2}: {:16} in {:4}", i, e.kind, e.kind.unit());
         }
     }
 }

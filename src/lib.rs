@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #![feature(generic_associated_types)]
-#![feature(const_generics_defaults)]
 #![feature(trait_alias)]
 
 #[cfg(feature = "alloc")]

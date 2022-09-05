@@ -206,7 +206,7 @@ where
         debug!("Broadcasting discovery request: {:?}", req);
 
         // Sending discovery request
-        let c = Net::<N>::encode_request_buff(&mut self.svc, &req, &Default::default())
+        let c = self.svc.encode_request_buff::<N>(&req, &Default::default())
                 .map_err(EngineError::Core)?;
 
         trace!("Container: {:?}", c);
@@ -373,7 +373,7 @@ where
         }
 
         // TODO: include peer keys here if available
-        let c = Net::<N>::encode_request_buff(&mut self.svc, &req, &Default::default())
+        let c = self.svc.encode_request_buff::<N>(&req, &Default::default())
                 .map_err(EngineError::Core)?;
 
         self.comms.send(&addr, c.raw()).map_err(EngineError::Comms)?;
@@ -434,7 +434,7 @@ where
                 }
 
                 // TODO: pass peer keys here
-                let c = Net::<N>::encode_response_buff(&mut self.svc, &r, &Default::default())
+                let c = self.svc.encode_response_buff::<N>(&r, &Default::default())
                     .map_err(EngineError::Core)?;
                 
                 self.comms.send(&from, c.raw()).map_err(EngineError::Comms)?;
@@ -710,7 +710,6 @@ mod test {
 
     //use dsf_core::prelude::*;
     use dsf_core::net::Status;
-    use dsf_core::options::Metadata;
     
     use crate::{prelude::*, IoT};
     use crate::endpoint::{self as ep, Descriptor, IotData, IotInfo};
@@ -733,9 +732,9 @@ mod test {
 
         // Setup descriptors
         let descriptors = IotInfo::new(&[
-            Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![]),
-            Descriptor::new(ep::Kind::Pressure, ep::Flags::R, vec![]),
-            Descriptor::new(ep::Kind::Humidity, ep::Flags::R, vec![]),
+            Descriptor::new(ep::Kind::Temperature, ep::Flags::R),
+            Descriptor::new(ep::Kind::Pressure, ep::Flags::R),
+            Descriptor::new(ep::Kind::Humidity, ep::Flags::R),
         ]).unwrap();
 
         // Setup engine with default service
@@ -816,7 +815,7 @@ mod test {
         let from = 1;
 
         // Build net request and execute
-        let ep_filter: &[Descriptor] = &[Descriptor::new(ep::Kind::Temperature, ep::Flags::R, vec![])];
+        let ep_filter: &[Descriptor] = &[Descriptor::new(ep::Kind::Temperature, ep::Flags::R)];
         let (body, n) = ep_filter.encode_buff::<128>().unwrap();
         let req = NetRequest::new(p.id(), 1, NetRequestBody::Discover((&body[..n]).to_vec(), vec![]), Default::default());
         let (resp, _evt) = e.handle_req(&from, req).expect("Failed to handle message");
@@ -840,9 +839,9 @@ mod test {
 
         // Build object for publishing
         let endpoint_data = IotData::new(&[
-            EpData::new(27.3.into(), vec![]),
-            EpData::new(1016.2.into(), vec![]),
-            EpData::new(59.6.into(), vec![]),
+            EpData::new(27.3.into()),
+            EpData::new(1016.2.into()),
+            EpData::new(59.6.into(),),
         ]).unwrap();
 
         // Call publish operation

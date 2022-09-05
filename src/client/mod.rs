@@ -1,6 +1,5 @@
 use core::convert::{TryInto};
 
-use dsf_core::options::Metadata;
 use dsf_core::wire::Container;
 use futures::prelude::*;
 use log::{debug, info, warn};
@@ -202,7 +201,7 @@ impl IotClient {
                 _ => return None,
             };
 
-            IotData::parse(body).map(|v| (i, v.0)).ok()
+            IotData::<8>::parse(body).map(|v| (i, v.0)).ok()
         }).collect();
 
         Ok((iot_info, iot_data))
@@ -234,7 +233,7 @@ impl IotClient {
             sec_key: Some(sec_key), 
             sym_keys: None};
 
-        Ok((id, keys))
+        Ok((id.into(), keys))
     }
 
     pub fn encode(opts: &EncodeOptions) -> Result<(), IotError> {
@@ -311,7 +310,9 @@ impl IotClient {
         match p[0].encrypted() {
             false => {
                 let eps = IotService::decode_body(p[0].body_raw())?;
-                println!("{}", EpDescriptor::display(&eps));
+                for i in 0..eps.len() {
+                    println!("{}: {}", i, eps[i]);
+                }
             },
             true => {
                 warn!("Encrypted page body, unable to parse endpoints");
