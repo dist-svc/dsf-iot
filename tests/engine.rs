@@ -1,6 +1,7 @@
 use std::net::{UdpSocket, SocketAddr};
 
 use log::info;
+use encdec::{EncodeExt};
 
 use dsf_core::prelude::*;
 use dsf_iot::prelude::*;

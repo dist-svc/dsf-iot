@@ -71,10 +71,15 @@ impl core::fmt::Display for Descriptor {
 }
 
 
-impl dsf_core::base::Encode for Descriptor {
+impl encdec::Encode for Descriptor {
     type Error = Error;
 
+    fn encode_len(&self) -> Result<usize, Self::Error> {
+        Ok(8)
+    }
+
     fn encode(&self, data: &mut [u8]) -> Result<usize, Error> {
+
         // Write option header (option kind and length)
         NetworkEndian::write_u16(&mut data[0..], iot_option_kinds::ENDPOINT_DESCRIPTOR);
         NetworkEndian::write_u16(
@@ -92,11 +97,11 @@ impl dsf_core::base::Encode for Descriptor {
     }
 }
 
-impl dsf_core::base::Parse for Descriptor {
+impl encdec::DecodeOwned for Descriptor {
     type Error = Error;
     type Output = Descriptor;
 
-    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
+    fn decode_owned(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         trace!("Parsing: {:x?}", buff);
 
         // Read option header (kind and length)
@@ -148,11 +153,11 @@ impl Data {
     }
 }
 
-impl dsf_core::base::Parse for Data {
+impl encdec::DecodeOwned for Data {
     type Error = Error;
     type Output = Data;
 
-    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
+    fn decode_owned(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         use iot_option_kinds::*;
 
         // Read option header (kind and length)
@@ -197,8 +202,24 @@ impl dsf_core::base::Parse for Data {
 }
 
 
-impl dsf_core::base::Encode for Data {
+impl encdec::Encode for Data {
     type Error = Error;
+
+    fn encode_len(&self) -> Result<usize, Self::Error> {
+        let n = match &self.value {
+            Value::Bool(v) => 4,
+            Value::Float32(_) | Value::Int32(_) => 8,
+            Value::Text(v) => {
+                let b = v.deref().as_bytes();
+                4 + b.len()
+            }
+            Value::Bytes(v) => {
+                4 + v.len()
+            }
+        };
+
+        Ok(n)
+    }
 
     fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
         use iot_option_kinds::*;
@@ -257,9 +278,9 @@ pub fn parse_endpoint_data(src: &str) -> Result<Data, &str> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use encdec::{Encode, Decode};
 
-    use dsf_core::{base::Encode, prelude::Parse};
+    use super::*;
 
     #[test]
     fn encode_decode_endpoint_descriptor() {
@@ -285,7 +306,7 @@ mod tests {
 
             trace!("Encoded {:?} to: {:0x?}", descriptor, &buff[..n]);
 
-            let (d, _n) = Descriptor::parse(&buff[..n]).expect("Decoding error");
+            let (d, _n) = Descriptor::decode(&buff[..n]).expect("Decoding error");
 
             assert_eq!(descriptor, &d);
         }
@@ -312,7 +333,7 @@ mod tests {
 
             trace!("Encoded {:?} to: {:0x?}", d, &buff[..n]);
 
-            let (d1, _n) = Data::parse(&buff[..n]).expect("Decoding error");
+            let (d1, _n) = Data::decode(&buff[..n]).expect("Decoding error");
 
             assert_eq!(d, &d1);
         }

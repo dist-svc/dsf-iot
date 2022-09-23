@@ -7,20 +7,19 @@
 #[macro_use]
 extern crate alloc;
 
+use encdec::DecodeExt;
+
+use dsf_core::api::Application;
+
 pub mod endpoint;
+pub mod engine;
+use engine::{Engine};
 pub mod error;
 pub mod service;
-
 pub mod prelude;
-
 #[cfg(feature = "client")]
 pub mod client;
 
-pub mod engine;
-
-
-use dsf_core::api::Application;
-use engine::{Engine};
 
 /// IoT application marker object
 pub struct IoT;
@@ -38,7 +37,6 @@ impl Application for IoT {
 
     /// Helper to match our service against a discovery request
     fn matches(body: &Self::Info, req: &[u8]) -> bool {
-        use dsf_core::base::Parse;
 
         // Always match empty requests
         if req.len() == 0 {
@@ -46,7 +44,7 @@ impl Application for IoT {
         }
 
         // Otherwise check for matching endpoint types
-        for e in crate::endpoint::Descriptor::parse_iter(req).filter_map(|d| d.ok() ) {
+        for e in crate::endpoint::Descriptor::decode_iter(req).filter_map(|d| d.ok() ) {
             if body.descriptors.contains(&e) {
                 log::debug!("Filter match on endpoint: {:?}", e);
                 return true;

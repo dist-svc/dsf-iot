@@ -13,6 +13,9 @@ pub enum IotError {
     #[cfg_attr(feature="thiserror", error("io error: {0}"))]
     Io(std::io::Error),
 
+    #[cfg_attr(feature="thiserror", error("Encode/Decode Error"))]
+    Encdec(encdec::Error),
+
     #[cfg_attr(feature="thiserror", error("No secret key for service"))]
     NoSecretKey,
 
@@ -43,5 +46,11 @@ impl From<dsf_core::error::Error> for IotError {
 impl From<std::io::Error> for IotError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)
+    }
+}
+
+impl From<encdec::Error> for IotError {
+    fn from(e: encdec::Error) -> Self {
+        Self::Encdec(e)
     }
 }

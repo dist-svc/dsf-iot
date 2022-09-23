@@ -1,12 +1,14 @@
 use core::convert::TryFrom;
 
+use encdec::{Encode, Decode};
+
 use dsf_core::api::Application;
 use dsf_core::types::{ImmutableData, BaseKind};
 use dsf_core::wire::Container;
 use crate::log::{Debug, trace, debug, info, warn, error};
 
 use dsf_core::{prelude::*, options::Options, net::Status};
-use dsf_core::base::{Parse, DataBody, PageBody};
+use dsf_core::base::{DataBody, PageBody};
 use dsf_core::service::Net;
 
 mod store;
@@ -387,7 +389,7 @@ where
 
         // Parse base object
         let base = match Container::parse(data, &self.store) {
-            Ok(v) => (v),
+            Ok(v) => v,
             Err(e) => {
                 error!("DSF parsing error: {:?}", e);
                 return Err(EngineError::Core(e))
@@ -665,7 +667,7 @@ where
                 }).map_err(EngineError::Store)?;
 
                 // Attempt to decode page body
-                match App::Info::parse(page.body_raw()) {
+                match App::Info::decode(page.body_raw()) {
                     Ok(i) => info!("Decode: {:?}", i),
                     Err(e) => error!("Failed to decode info: {:?}", e),
                 };
@@ -707,6 +709,8 @@ where
 
 #[cfg(test)]
 mod test {
+
+    use encdec::{Encode, EncodeExt, Decode, DecodeExt};
 
     //use dsf_core::prelude::*;
     use dsf_core::net::Status;

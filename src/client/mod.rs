@@ -4,6 +4,8 @@ use dsf_core::wire::Container;
 use futures::prelude::*;
 use log::{debug, info, warn};
 
+use encdec::{Encode, Decode};
+
 #[cfg(feature="alloc")]
 use pretty_hex::*;
 
@@ -201,7 +203,7 @@ impl IotClient {
                 _ => return None,
             };
 
-            IotData::<8>::parse(body).map(|v| (i, v.0)).ok()
+            IotData::<8>::decode(body).map(|v| (i, v.0)).ok()
         }).collect();
 
         Ok((iot_info, iot_data))

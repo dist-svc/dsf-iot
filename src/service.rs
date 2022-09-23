@@ -5,7 +5,9 @@ use core::convert::TryFrom;
 #[cfg(feature = "alloc")]
 use alloc::{vec::Vec, string::String};
 
-use dsf_core::base::{Body, Parse, Encode, DataBody, PageBody};
+use encdec::{Encode, Decode, DecodeOwned};
+
+use dsf_core::base::{Body, DataBody, PageBody};
 use dsf_core::types::*;
 use dsf_core::wire::Container;
 
@@ -42,8 +44,8 @@ pub struct Service2<PRI=Vec<u8>, OPT=Vec<()>, DAT=Vec<u8>> {
 
 impl <PRI, DAT> Service2<PRI, DAT> 
 where
-    PRI: Parse + Encode,
-    DAT: Parse + Encode,
+    PRI: Encode + DecodeOwned,
+    DAT: Encode + DecodeOwned,
 {
 
 }
@@ -105,7 +107,7 @@ impl IotService {
 
         // Decode each endpoint entry
         while index < buff.len() {
-            let (ed, n) = ep::Descriptor::parse(&buff[index..])?;
+            let (ed, n) = ep::Descriptor::decode(&buff[index..])?;
 
             endpoints.push(ed);
             index += n;

@@ -1,9 +1,12 @@
 
 use heapless::Vec;
+use encdec::{Encode, Decode, DecodeOwned};
+use byteorder::{LittleEndian, ByteOrder};
+
+
+use dsf_core::base::{PageBody, DataBody};
 
 pub mod kinds;
-use byteorder::{LittleEndian, ByteOrder};
-use dsf_core::{base::{PageBody, DataBody}, prelude::{Encode, Parse}};
 pub use kinds::*;
 
 pub mod value;
@@ -15,8 +18,9 @@ pub use desc::*;
 use crate::prelude::IotError;
 
 /// IoT information object containing endpoint descriptors and service metadata
-#[derive(Debug)]
+#[derive(Debug, Encode, DecodeOwned)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[encdec(error = "IotError")]
 pub struct IotInfo<const N: usize = 8> {
     pub descriptors: Vec<Descriptor, N>,
 }
@@ -48,44 +52,9 @@ impl <const N: usize> Default for IotInfo<N> {
         Self { descriptors: Vec::new() }
     }
 }
-
-impl <const N: usize> Encode for IotInfo<N> {
-    type Error = IotError;
-
-    fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut index = 0;
-
-        // Encode each endpoint entry
-        for ed in &self.descriptors {
-            index += ed.encode(&mut buff[index..])?;
-        }
-
-        Ok(index)
-    }
-}
-
-impl <const N: usize> Parse for IotInfo<N> {
-    type Output = IotInfo;
-    type Error = IotError;
-
-    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
-        let mut index = 0;
-        let mut descriptors = Vec::new();
-
-        // Decode each endpoint entry
-        while index < buff.len() {
-            let (ed, n) = Descriptor::parse(&buff[index..])?;
-
-            descriptors.push(ed);
-            index += n;
-        }
-
-        Ok((IotInfo{descriptors, }, index))
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Encode, DecodeOwned)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[encdec(error = "IotError")]
 pub struct IotData<const N: usize = 8> {
     /// Measurement values (these must correspond with service endpoints)
     pub data: Vec<Data, N>,
@@ -110,41 +79,5 @@ impl <const N: usize> core::fmt::Display for IotData<N> {
             writeln!(f, "  - {:2}: {:4}", i, e.value)?;
         }
         Ok(())
-    }
-}
-
-impl <const N: usize> Encode for IotData<N> {
-    type Error = IotError;
-
-    fn encode(&self, buff: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut index = 0;
-
-        // Encode each endpoint entry
-        for ed in &self.data {
-            index += ed.encode(&mut buff[index..])?;
-        }
-
-        Ok(index)
-    }
-}
-
-impl <const N: usize> Parse for IotData<N> {
-    type Output = IotData;
-
-    type Error = IotError;
-
-    fn parse(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
-        let mut index = 0;
-        let mut data = Vec::new();
-
-        // Decode each endpoint entry
-        while index < buff.len() {
-            let (ed, n) = Data::parse(&buff[index..])?;
-
-            data.push(ed);
-            index += n;
-        }
-
-        Ok((IotData{data}, index))
     }
 }
