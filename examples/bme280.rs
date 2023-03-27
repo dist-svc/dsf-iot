@@ -118,7 +118,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?;
 
         // Wait until next measurement
-        async_std::task::sleep(*opts.period).await;
+        tokio::task::sleep(*opts.period).await;
     }
 
     Ok(())

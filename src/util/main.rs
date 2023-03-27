@@ -7,7 +7,7 @@ extern crate futures;
 use futures::prelude::*;
 
 extern crate async_std;
-use async_std::task;
+use tokio::task;
 
 extern crate humantime;
 
