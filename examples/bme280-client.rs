@@ -39,7 +39,7 @@ struct Config {
     log_level: LevelFilter,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
     let opts = Config::from_args();
@@ -58,7 +58,7 @@ async fn main() -> Result<(), anyhow::Error> {
         "Connecting to client socket: '{}'",
         &opts.daemon_options.daemon_socket
     );
-    let mut c = IotClient::new(&opts.daemon_options)?;
+    let mut c = IotClient::new(&opts.daemon_options).await?;
 
     let service = opts.service.clone();
 
@@ -69,9 +69,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let s = c
                 .create(CreateOptions {
                     endpoints: vec![
-                        Descriptor::new(Kind::Temperature, Flags::R, &[]),
-                        Descriptor::new(Kind::Pressure, Flags::R, &[]),
-                        Descriptor::new(Kind::Humidity, Flags::R, &[]),
+                        EpDescriptor::new(EpKind::Temperature, EpFlags::R),
+                        EpDescriptor::new(EpKind::Pressure, EpFlags::R),
+                        EpDescriptor::new(EpKind::Humidity, EpFlags::R),
                     ],
                     ..Default::default()
                 })
@@ -102,9 +102,9 @@ async fn main() -> Result<(), anyhow::Error> {
         let m = bme280.measure().unwrap();
 
         let data = vec![
-            Data::new(m.temperature.into(), &[]),
-            Data::new((m.pressure / 1000.0).into(), &[]),
-            Data::new(m.humidity.into(), &[]),
+            EpData::new(m.temperature.into()),
+            EpData::new((m.pressure / 1000.0).into()),
+            EpData::new(m.humidity.into()),
         ];
 
         println!("Measurement: {:?}", data);
@@ -118,7 +118,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?;
 
         // Wait until next measurement
-        tokio::task::sleep(*opts.period).await;
+        tokio::time::sleep(*opts.period).await;
     }
 
     Ok(())

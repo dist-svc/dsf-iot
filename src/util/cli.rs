@@ -1,24 +1,22 @@
-extern crate structopt;
-use std::any;
+
+
+use std::time::{Instant, Duration};
+
+use dsf_core::prelude::ServiceBuilder;
+
+use dsf_iot::{prelude::*, IotEngine};
+use dsf_iot::engine::{Engine, MemoryStore, EngineEvent};
+use dsf_rpc::DataInfo;
 
 use structopt::StructOpt;
 
-extern crate futures;
 use futures::prelude::*;
 
-extern crate async_std;
-use tokio::task;
+use tracing::{debug, info, error};
 
-extern crate humantime;
-
-#[macro_use]
-extern crate tracing;
-
-extern crate tracing_subscriber;
 use tracing_subscriber::filter::{LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
-use dsf_iot::prelude::*;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -37,7 +35,7 @@ struct Config {
     log_level: LevelFilter,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
     let opts = Config::from_args();
@@ -57,7 +55,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let (id, keys) = IotClient::generate().unwrap();
 
             println!("ID: {}", id);
-            println!("Public key: {}", keys.pub_key);
+            println!("Public key: {}", keys.pub_key.unwrap());
             println!("Private key: {}", keys.pri_key.unwrap());
             println!("Secret key: {}", keys.sec_key.unwrap());
 
@@ -67,12 +65,41 @@ async fn main() -> Result<(), anyhow::Error> {
             IotClient::encode(opts)?;
 
             return Ok(())
+        },
+        Command::Decode(opts) => {
+            IotClient::decode(opts)?;
+
+            return Ok(())
+        },
+        Command::Discover(_opts) => {
+            // Create transient service
+            let mut engine = IotEngine::<_, _, 512>::udp(IotInfo::new(&[]).unwrap(), "0.0.0.0:10100", MemoryStore::new())?;
+
+            info!("Starting discovery from: {}", engine.id());
+
+            // Issue discover message
+            let req_id = engine.discover(&[], &[])?;
+
+            // Await responses
+            let then = Instant::now();
+            while Instant::now().duration_since(then) < Duration::from_secs(3) {
+                let mut buff = [0u8; 512];
+
+                if let EngineEvent::Discover(id) = engine.tick()? {
+                    info!("Discovered service: {:?}", id);
+                }
+
+            }
+
+            info!("Discovery complete");
+
+            return Ok(())
         }
         _ => (),
     }
 
     // Create client connector
-    let mut c = match IotClient::new(&opts.client_options) {
+    let mut c = match IotClient::new(&opts.client_options).await {
         Ok(c) => c,
         Err(e) => {
             error!(
@@ -136,20 +163,20 @@ fn print_service_list(services: &[IotService]) {
         for i in 0..s.endpoints.len() {
             let e = &s.endpoints[i];
 
-            println!("  - {:2}: {:16} in {:4} (metadata: {:?})", i, e.kind, e.kind.unit(), e.meta);
+            println!("  - {:2}: {:16} in {:4}", i, e.kind, e.kind.unit());
         }
     }
 }
 
-fn print_service_data(service: &IotService, data: &[IotData]) {
+fn print_service_data(service: &IotService, data: &[(DataInfo, IotData)]) {
     println!("Service ID: {}", service.id);
     println!("Data: ");
 
-    for d in data {
-        let sig = d.signature.to_string();
-        let prev = d.previous.as_ref().map(|v| v.to_string() ).unwrap_or("none".to_string());
+    for (i, d) in data {
+        let sig = i.signature.to_string();
+        let prev = i.previous.as_ref().map(|v| v.to_string() ).unwrap_or("none".to_string());
 
-        println!("Object: {} index: {} (previous: {})", &sig[..16], d.index, prev);
+        println!("Object: {} index: {} (previous: {})", &sig[..16], i.index, prev);
 
         for i in 0..d.data.len() {
             let ep_info = &service.endpoints[i];

@@ -2,12 +2,12 @@ use core::fmt::Write;
 use core::str::FromStr;
 
 #[cfg(feature = "alloc")]
-use crate::alloc::prelude::v1::*;
+use alloc::{vec::Vec, string::{String, ToString}};
 
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
     (1, Kind::Temperature, "temperature",  "°C"     ),
-    (2, Kind::Humidity,    "humidity",     "% RH"   ),
+    (2, Kind::Humidity,    "humidity",     "%RH"    ),
     (3, Kind::Pressure,    "pressure",     "kPa"    ),
     (4, Kind::Co2,         "CO2",          "ppm"    ),
     (5, Kind::State,       "state",        "bool"   ),
@@ -17,9 +17,11 @@ pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
 
 /// [`Kind`] specifies the type of IoT endpoint, translated using the [`ENDPOINT_KINDS`] table
 /// For example: Temperature, Heart-Rate
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "strum", derive(strum_macros::Display))]
+#[strum(serialize_all="snake_case")]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+
 pub enum Kind {
     /// Temperature in (degrees Celcius)
     Temperature,
@@ -40,8 +42,7 @@ pub enum Kind {
 }
 
 /// Parse an endpoint kind from a string
-#[cfg(feature = "std")]
-pub fn parse_endpoint_kind(src: &str) -> Result<Kind, String> {
+pub fn parse_endpoint_kind(src: &str) -> Result<Kind, &str> {
     // Coerce to lower case
     let src = src.to_lowercase();
 
@@ -55,11 +56,7 @@ pub fn parse_endpoint_kind(src: &str) -> Result<Kind, String> {
         return Ok(Kind::Unknown(v));
     }
 
-    Err(format!(
-        "Unrecognised endpoint kind '{}' (options: {})",
-        src,
-        Kind::variants()
-    ))
+    Err("Unrecognised endpoint kind")
 }
 
 impl Kind {
@@ -68,7 +65,7 @@ impl Kind {
         let mut buff = String::new();
 
         for (i, _k, s, u) in ENDPOINT_KINDS {
-            write!(&mut buff, "{} (unit: {}, id: {}), ", s, u, i).unwrap();
+            write!(&mut buff, "'{}' (unit: {}, id: {}), ", s, u, i).unwrap();
         }
 
         write!(&mut buff, "RAW_ID (no unit)").unwrap();
@@ -88,7 +85,7 @@ impl core::str::FromStr for Kind {
     type Err = &'static str;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
-        match ENDPOINT_KINDS.iter().find(|(_i, _k, s, _u)| src == *s) {
+        match ENDPOINT_KINDS.iter().find(|(_i, _k, s, _u)| src.to_lowercase() == *s.to_lowercase()) {
             Some(e) => Ok(e.1),
             None => Err("No matching endpoint name found"),
         }
