@@ -35,7 +35,7 @@ struct Config {
     log_level: LevelFilter,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
     let opts = Config::from_args();
@@ -99,7 +99,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     // Create client connector
-    let mut c = match IotClient::new(&opts.client_options) {
+    let mut c = match IotClient::new(&opts.client_options).await {
         Ok(c) => c,
         Err(e) => {
             error!(

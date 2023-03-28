@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#![feature(generic_associated_types)]
 #![feature(trait_alias)]
 
 #[cfg(feature = "alloc")]
@@ -13,13 +12,13 @@ use dsf_core::api::Application;
 
 pub mod endpoint;
 pub mod engine;
-use engine::{Engine};
 pub mod error;
 pub mod service;
 pub mod prelude;
 #[cfg(feature = "client")]
 pub mod client;
 
+use engine::{Engine};
 
 /// IoT application marker object
 pub struct IoT;

@@ -35,8 +35,8 @@ pub struct IotClient {
 
 impl IotClient {
     /// Create a new DSF-IoT client using the provided path
-    pub fn new(options: &Options) -> Result<Self, IotError> {
-        let client = Client::new(options)?;
+    pub async fn new(options: &Options) -> Result<Self, IotError> {
+        let client = Client::new(options).await?;
 
         Ok(Self { client })
     }

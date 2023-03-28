@@ -58,7 +58,7 @@ async fn main() -> Result<(), anyhow::Error> {
         "Connecting to client socket: '{}'",
         &opts.daemon_options.daemon_socket
     );
-    let mut c = IotClient::new(&opts.daemon_options)?;
+    let mut c = IotClient::new(&opts.daemon_options).await?;
 
     let service = opts.service.clone();
 
