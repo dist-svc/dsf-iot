@@ -13,7 +13,7 @@ use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
 use dsf_iot::prelude::*;
-use dsf_iot::engine::{SledStore};
+use dsf_engine::store::{SledStore};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "DSF IoT BME280 Client")]
@@ -65,7 +65,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     debug!("opts: {:?}", opts);
 
-    // TODO: setup store
+    // Setup store / database
     let store = match SledStore::new(&opts.database) {
         Ok(e) => e,
         Err(e) => {

@@ -9,16 +9,15 @@ extern crate alloc;
 use encdec::DecodeExt;
 
 use dsf_core::api::Application;
+use dsf_engine::engine::Engine;
 
 pub mod endpoint;
-pub mod engine;
 pub mod error;
 pub mod service;
 pub mod prelude;
+
 #[cfg(feature = "client")]
 pub mod client;
-
-use engine::{Engine};
 
 /// IoT application marker object
 pub struct IoT;
@@ -55,7 +54,7 @@ impl Application for IoT {
     }
 }
 
-/// IoT type for engine instances
+/// IoT engine type alias
 pub type IotEngine<Comms, Stor, const N: usize = 512> = Engine<IoT, Comms, Stor, N>;
 
 #[cfg(feature = "defmt")]

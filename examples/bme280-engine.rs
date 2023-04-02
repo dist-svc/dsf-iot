@@ -12,7 +12,7 @@ use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
 use dsf_iot::prelude::*;
-use dsf_iot::engine::{MemoryStore};
+use dsf_engine::{store::MemoryStore};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "DSF IoT BME280 Client")]

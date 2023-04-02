@@ -5,7 +5,7 @@ use std::time::{Instant, Duration};
 use dsf_core::prelude::ServiceBuilder;
 
 use dsf_iot::{prelude::*, IotEngine};
-use dsf_iot::engine::{Engine, MemoryStore, EngineEvent};
+use dsf_engine::{engine::{Engine, EngineEvent}, store::MemoryStore};
 use dsf_rpc::DataInfo;
 
 use structopt::StructOpt;

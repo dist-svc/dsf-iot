@@ -6,7 +6,7 @@ use encdec::{EncodeExt};
 use dsf_core::prelude::*;
 use dsf_iot::prelude::*;
 
-use dsf_iot::engine::{MemoryStore, EngineEvent};
+use dsf_engine::{engine::{EngineEvent}, store::MemoryStore};
 
 type E = IotEngine<UdpSocket, MemoryStore, 512>;
 
