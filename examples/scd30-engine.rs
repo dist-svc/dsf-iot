@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use hal::i2cdev::linux::LinuxI2CError;
-use structopt::StructOpt;
+use clap::Parser;
 
 use linux_embedded_hal::{self as hal, Delay, I2cdev};
 use embedded_hal::blocking::delay::DelayMs;
@@ -15,38 +15,38 @@ use tracing_subscriber::FmtSubscriber;
 use dsf_iot::prelude::*;
 use dsf_engine::store::{SledStore};
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "DSF IoT BME280 Client")]
+#[derive(Debug, clap)]
+#[clap(name = "DSF IoT BME280 Client")]
 struct Config {
-    #[structopt(long, default_value = "/dev/i2c-1")]
+    #[clap(long, default_value = "/dev/i2c-1")]
     /// Specify the I2C port for the sensor
     i2c_dev: String,
 
-    #[structopt(long, default_value = "1m")]
+    #[clap(long, default_value = "1m")]
     /// Specify a period for sensor readings
     period: humantime::Duration,
 
-    #[structopt(long, default_value = "scd30.db")]
+    #[clap(long, default_value = "scd30.db")]
     /// Database file for BME280 engine
     database: String,
 
-    #[structopt(long, default_value = "100ms")]
+    #[clap(long, default_value = "100ms")]
     /// Delay between sensor poll operations
     poll_delay: humantime::Duration,
 
-    #[structopt(long)]
+    #[clap(long)]
     /// Service name
     name: Option<String>,
 
-    #[structopt(long)]
+    #[clap(long)]
     /// Service room
     room: Option<String>,
 
-    #[structopt(long = "allowed-errors", default_value="3")]
+    #[clap(long = "allowed-errors", default_value="3")]
     /// Number of allowed I2C errors (per measurement attempt) prior to exiting
     pub allowed_errors: usize,
 
-    #[structopt(long, default_value = "info")]
+    #[clap(long, default_value = "info")]
     /// Enable verbose logging
     log_level: LevelFilter,
 }

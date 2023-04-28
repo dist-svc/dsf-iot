@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use bytes::BytesMut;
 
 use dsf_core::api::Application;
-use structopt::StructOpt;
+use clap::{Parser, Subcommand};
 
 use dsf_core::base::{Encode};
 use dsf_core::types::{PageKind};
@@ -20,7 +20,7 @@ use crate::endpoint::{self as ep, parse_endpoint_descriptor, parse_endpoint_data
 use crate::error::IotError;
 use crate::{service::*, IoT};
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Create a new IOT service
     Create(CreateOptions),
@@ -59,21 +59,21 @@ pub enum Command {
     Decode(DecodeOptions),
 }
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Parser)]
 pub struct CreateOptions {
     /// Service endpoint information
-    #[structopt(long, parse(try_from_str=parse_endpoint_descriptor))]
+    #[clap(long, value_parser=parse_endpoint_descriptor)]
     pub endpoints: Vec<ep::Descriptor>,
 
     /// Service metadata
-    #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
+    #[clap(long, value_parser=try_parse_key_value)]
     pub meta: Vec<(String, String)>,
 
-    #[structopt(short = "p", long = "public")]
+    #[clap(short)]
     /// Indicate the service should be public (unencrypted)
     pub public: bool,
 
-    #[structopt(long = "register")]
+    #[clap(long)]
     /// Indicate the service should be registered and replicated following creation
     pub register: bool,
 }
@@ -112,17 +112,17 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
     }
 }
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Parser)]
 pub struct PublishOptions {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub service: ServiceIdentifier,
 
     /// Measurement values (these must correspond with service endpoints)
-    #[structopt(short, long, parse(try_from_str = parse_endpoint_data))]
+    #[clap(short, long, value_parser=parse_endpoint_data)]
     pub data: Vec<ep::Data>,
 
     /// Measurement metadata
-    #[structopt(long = "meta", parse(try_from_str = try_parse_key_value))]
+    #[clap(long, value_parser=try_parse_key_value)]
     pub meta: Vec<(String, String)>,
 }
 
@@ -157,33 +157,33 @@ pub type ListOptions = dsf_rpc::service::ListOptions;
 /// InfoOptions used to fetch info for services
 pub type InfoOptions = dsf_rpc::service::InfoOptions;
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Parser)]
 pub struct EncodeOptions {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub create: CreateOptions,
 
     /// Keys for decoding
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub keys: Keys,
 
     /// File name to write encoded service
-    #[structopt(long)]
+    #[clap(long)]
     pub file: Option<String>,
 }
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Parser)]
 pub struct DecodeOptions {
     /// File name to parse encoded iot data
-    #[structopt(long)]
+    #[clap(long)]
     pub file: String,
 
     /// Keys for decoding
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub keys: Keys,
 }
 
-/// IoT Metadata mapping from structopt to an options list
-#[derive(Debug, Clone, StructOpt)]
+/// IoT Metadata mapping from clap to an options list
+#[derive(Debug, Clone, Parser)]
 pub struct MetaOptions {
 
 }
@@ -194,7 +194,7 @@ impl Into<Vec<Options>> for MetaOptions {
     }
 }
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Parser)]
 pub struct DiscoverOptions {
 
 }

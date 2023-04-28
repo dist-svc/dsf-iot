@@ -11,6 +11,8 @@ use heapless::{String};
 
 //use modular_bitfield::prelude::*;
 
+use crate::prelude::IotError;
+
 use super::kinds::*;
 use super::value::*;
 
@@ -131,7 +133,7 @@ impl encdec::DecodeOwned for Descriptor {
 }
 
 
-pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, &str> {
+pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, IotError> {
     let kind = parse_endpoint_kind(src)?;
     Ok(Descriptor::new(kind, Flags::empty()))
 }
@@ -271,7 +273,7 @@ impl encdec::Encode for Data {
     }
 }
 
-pub fn parse_endpoint_data(src: &str) -> Result<Data, &str> {
+pub fn parse_endpoint_data(src: &str) -> Result<Data, IotError> {
     let value = parse_endpoint_value(src)?;
     Ok(Data::new(value))
 }

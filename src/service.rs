@@ -20,18 +20,18 @@ pub const IOT_DATA_PAGE_KIND: u16 = 2;
 pub trait EndpointContainer: AsRef<ep::Descriptor> {}
 
 #[derive(Debug, Clone)]
-//#[cfg_attr(feature = "structopt", derive(structopt::StructOpt))]
+//#[cfg_attr(feature = "clap", derive(clap::StructOpt))]
 pub struct IotService<EPS = Vec<ep::Descriptor>, META = Vec<(String, String)>> {
     pub id: Id,
 
     pub secret_key: Option<SecretKey>,
 
     /// Service endpoint information
-    //#[cfg_attr(feature = "structopt", structopt(long, parse(try_from_str = parse_endpoint_descriptor)))]
+    //#[cfg_attr(feature = "clap", clap(long, parse(try_from_str = parse_endpoint_descriptor)))]
     pub endpoints: EPS,
 
     /// Service metadata
-    //#[cfg_attr(feature = "structopt", structopt(long, parse(try_from_str = try_parse_key_value)))]
+    //#[cfg_attr(feature = "clap", clap(long, parse(try_from_str = try_parse_key_value)))]
     pub meta: META,
 }
 

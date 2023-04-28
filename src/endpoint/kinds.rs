@@ -4,6 +4,8 @@ use core::str::FromStr;
 #[cfg(feature = "alloc")]
 use alloc::{vec::Vec, string::{String, ToString}};
 
+use crate::prelude::IotError;
+
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
     (1, Kind::Temperature, "temperature",  "°C"     ),
@@ -42,7 +44,7 @@ pub enum Kind {
 }
 
 /// Parse an endpoint kind from a string
-pub fn parse_endpoint_kind(src: &str) -> Result<Kind, &str> {
+pub fn parse_endpoint_kind(src: &str) -> Result<Kind, IotError> {
     // Coerce to lower case
     let src = src.to_lowercase();
 
@@ -56,7 +58,7 @@ pub fn parse_endpoint_kind(src: &str) -> Result<Kind, &str> {
         return Ok(Kind::Unknown(v));
     }
 
-    Err("Unrecognised endpoint kind")
+    Err(IotError::UnrecognisedEndpoint)
 }
 
 impl Kind {

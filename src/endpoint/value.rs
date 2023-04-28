@@ -8,6 +8,8 @@ pub trait StringIsh = AsRef<str> + Debug;
 
 use heapless::{String, Vec};
 
+use crate::prelude::IotError;
+
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -73,7 +75,7 @@ impl core::fmt::Display for Value {
 }
 
 impl FromStr for Value {
-    type Err = &'static str;
+    type Err = IotError;
 
     fn from_str(src: &str) -> Result<Value, Self::Err> {
         // first attempt to match bools
@@ -96,6 +98,6 @@ impl FromStr for Value {
 }
 
 /// Helper to parse endpoint data from string values
-pub(crate) fn parse_endpoint_value(src: &str) -> Result<Value, &'static str> {
+pub(crate) fn parse_endpoint_value(src: &str) -> Result<Value, IotError> {
     Value::from_str(src)
 }

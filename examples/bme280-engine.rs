@@ -1,7 +1,7 @@
 
 use std::time::{Instant, Duration};
 
-use structopt::StructOpt;
+use clap::Parser;
 
 use linux_embedded_hal::{Delay, I2cdev};
 
@@ -14,22 +14,22 @@ use tracing_subscriber::FmtSubscriber;
 use dsf_iot::prelude::*;
 use dsf_engine::{store::MemoryStore};
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "DSF IoT BME280 Client")]
+#[derive(Debug, Parser)]
+#[clap(name = "DSF IoT BME280 Client")]
 struct Config {
-    #[structopt(long, default_value = "/dev/i2c-1")]
+    #[clap(long, default_value = "/dev/i2c-1")]
     /// Specify the I2C port for the sensor
     i2c_dev: String,
 
-    #[structopt(long, default_value = "119")]
+    #[clap(long, default_value = "119")]
     /// Specify the I2C address for the sensor
     i2c_addr: u8,
 
-    #[structopt(long, default_value = "1m")]
+    #[clap(long, default_value = "1m")]
     /// Specify a period for sensor readings
     period: humantime::Duration,
 
-    #[structopt(long, default_value = "info")]
+    #[clap(long, default_value = "info")]
     /// Enable verbose logging
     log_level: LevelFilter,
 }

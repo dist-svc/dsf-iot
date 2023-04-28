@@ -8,7 +8,7 @@ use dsf_iot::{prelude::*, IotEngine};
 use dsf_engine::{engine::{Engine, EngineEvent}, store::MemoryStore};
 use dsf_rpc::DataInfo;
 
-use structopt::StructOpt;
+use clap::Parser;
 
 use futures::prelude::*;
 
@@ -18,19 +18,19 @@ use tracing_subscriber::filter::{LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[clap(
     name = "DSF IoT Client",
     about = "Distributed Service Discovery (DSF) client, used for managing dsf-iot services"
 )]
 struct Config {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     cmd: Command,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     client_options: Options,
 
-    #[structopt(long, default_value = "info")]
+    #[clap(long, default_value = "info")]
     /// Enable verbose logging
     log_level: LevelFilter,
 }
@@ -38,7 +38,7 @@ struct Config {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
-    let opts = Config::from_args();
+    let opts = Config::parse();
 
     // Setup logging
     let _ = FmtSubscriber::builder()
@@ -104,7 +104,7 @@ async fn main() -> Result<(), anyhow::Error> {
         Err(e) => {
             error!(
                 "Error connecting to daemon on '{}': {:?}",
-                &opts.client_options.daemon_socket, e
+                &opts.client_options.daemon_socket(), e
             );
             return Err(e.into());
         }
