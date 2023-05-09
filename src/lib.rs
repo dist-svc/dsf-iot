@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-
 #![feature(trait_alias)]
 
 #[cfg(feature = "alloc")]
@@ -13,7 +12,6 @@ use dsf_engine::engine::Engine;
 
 pub mod endpoint;
 pub mod error;
-pub mod service;
 pub mod prelude;
 
 #[cfg(feature = "client")]
@@ -35,14 +33,13 @@ impl Application for IoT {
 
     /// Helper to match our service against a discovery request
     fn matches(body: &Self::Info, req: &[u8]) -> bool {
-
         // Always match empty requests
         if req.len() == 0 {
             return true;
         }
 
         // Otherwise check for matching endpoint types
-        for e in crate::endpoint::Descriptor::decode_iter(req).filter_map(|d| d.ok() ) {
+        for e in crate::endpoint::Descriptor::decode_iter(req).filter_map(|d| d.ok()) {
             if body.descriptors.contains(&e) {
                 log::debug!("Filter match on endpoint: {:?}", e);
                 return true;
@@ -59,14 +56,14 @@ pub type IotEngine<Comms, Stor, const N: usize = 512> = Engine<IoT, Comms, Stor,
 
 #[cfg(feature = "defmt")]
 mod log {
-    pub use defmt::{trace, debug, info, warn, error};
+    pub use defmt::{debug, error, info, trace, warn};
 
     pub trait Debug = core::fmt::Debug + defmt::Format;
 }
 
 #[cfg(not(feature = "defmt"))]
 mod log {
-    pub use log::{trace, debug, info, warn, error};
+    pub use log::{debug, error, info, trace, warn};
 
     pub trait Debug = core::fmt::Debug;
 }

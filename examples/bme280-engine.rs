@@ -1,5 +1,4 @@
-
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 
@@ -7,12 +6,12 @@ use linux_embedded_hal::{Delay, I2cdev};
 
 use bme280::BME280;
 
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
+use dsf_engine::store::SqliteStore;
 use dsf_iot::prelude::*;
-use dsf_engine::{store::MemoryStore};
 
 #[derive(Debug, Parser)]
 #[clap(name = "DSF IoT BME280 Client")]
@@ -25,6 +24,10 @@ struct Config {
     /// Specify the I2C address for the sensor
     i2c_addr: u8,
 
+    #[clap(long, default_value = "scd30.db")]
+    /// Database file for BME280 engine
+    database: String,
+
     #[clap(long, default_value = "1m")]
     /// Specify a period for sensor readings
     period: humantime::Duration,
@@ -36,7 +39,7 @@ struct Config {
 
 fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
-    let opts = Config::from_args();
+    let opts = Config::parse();
 
     let filter = EnvFilter::from_default_env()
         .add_directive("async_std=warn".parse().unwrap())
@@ -48,14 +51,15 @@ fn main() -> Result<(), anyhow::Error> {
     debug!("opts: {:?}", opts);
 
     // TODO: setup store
-    let store = MemoryStore::new();
+    let store = SqliteStore::new(&opts.database)?;
 
     // Setup service
     let descriptors = IotInfo::new(&[
         EpDescriptor::new(EpKind::Temperature, EpFlags::R),
         EpDescriptor::new(EpKind::Pressure, EpFlags::R),
         EpDescriptor::new(EpKind::Humidity, EpFlags::R),
-    ]).unwrap();
+    ])
+    .unwrap();
 
     // TODO: split service and engine setup better
 
@@ -97,7 +101,8 @@ fn main() -> Result<(), anyhow::Error> {
             EpData::new(m.temperature.into()),
             EpData::new((m.pressure / 1000.0).into()),
             EpData::new(m.humidity.into()),
-        ]).unwrap();
+        ])
+        .unwrap();
 
         println!("Measurement: {:?}", data);
 
@@ -105,7 +110,7 @@ fn main() -> Result<(), anyhow::Error> {
         match engine.publish(data, &[]) {
             Ok(_) => {
                 println!("Published object: ")
-            },
+            }
             Err(e) => {
                 println!("Failed to publish object");
             }

@@ -7,6 +7,7 @@ use alloc::{vec::Vec, string::String};
 
 use encdec::{Encode, Decode, DecodeOwned};
 
+use dsf_core::prelude::Options;
 use dsf_core::base::{Body, DataBody, PageBody};
 use dsf_core::types::*;
 use dsf_core::wire::Container;
@@ -21,7 +22,7 @@ pub trait EndpointContainer: AsRef<ep::Descriptor> {}
 
 #[derive(Debug, Clone)]
 //#[cfg_attr(feature = "clap", derive(clap::StructOpt))]
-pub struct IotService<EPS = Vec<ep::Descriptor>, META = Vec<(String, String)>> {
+pub struct IotService<EPS = Vec<ep::Descriptor>, META = Vec<Options>> {
     pub id: Id,
 
     pub secret_key: Option<SecretKey>,

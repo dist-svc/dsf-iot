@@ -1,21 +1,21 @@
 use std::time::{Duration, Instant};
 
-use hal::i2cdev::linux::LinuxI2CError;
 use clap::Parser;
+use hal::i2cdev::linux::LinuxI2CError;
 
-use linux_embedded_hal::{self as hal, Delay, I2cdev};
 use embedded_hal::blocking::delay::DelayMs;
+use linux_embedded_hal::{self as hal, Delay, I2cdev};
 
-use sensor_scd30::{Scd30, Measurement};
+use sensor_scd30::{Measurement, Scd30};
 
-use tracing::{debug, info, warn, error};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
+use dsf_engine::store::SqliteStore;
 use dsf_iot::prelude::*;
-use dsf_engine::store::{SledStore};
 
-#[derive(Debug, clap)]
+#[derive(Debug, Parser)]
 #[clap(name = "DSF IoT BME280 Client")]
 struct Config {
     #[clap(long, default_value = "/dev/i2c-1")]
@@ -27,7 +27,7 @@ struct Config {
     period: humantime::Duration,
 
     #[clap(long, default_value = "scd30.db")]
-    /// Database file for BME280 engine
+    /// Database file for SCD30 engine
     database: String,
 
     #[clap(long, default_value = "100ms")]
@@ -42,7 +42,7 @@ struct Config {
     /// Service room
     room: Option<String>,
 
-    #[clap(long = "allowed-errors", default_value="3")]
+    #[clap(long = "allowed-errors", default_value = "3")]
     /// Number of allowed I2C errors (per measurement attempt) prior to exiting
     pub allowed_errors: usize,
 
@@ -53,7 +53,7 @@ struct Config {
 
 fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
-    let opts = Config::from_args();
+    let opts = Config::parse();
 
     let filter = EnvFilter::from_default_env()
         .add_directive("sled=warn".parse().unwrap())
@@ -66,7 +66,7 @@ fn main() -> Result<(), anyhow::Error> {
     debug!("opts: {:?}", opts);
 
     // Setup store / database
-    let store = match SledStore::new(&opts.database) {
+    let store = match SqliteStore::new(&opts.database) {
         Ok(e) => e,
         Err(e) => {
             return Err(anyhow::anyhow!("Failed to open store: {:?}", e));
@@ -77,8 +77,9 @@ fn main() -> Result<(), anyhow::Error> {
     let descriptors = IotInfo::new(&[
         EpDescriptor::new(EpKind::Temperature, EpFlags::R),
         EpDescriptor::new(EpKind::Co2, EpFlags::R),
-        EpDescriptor::new(EpKind::Humidity, EpFlags::R,),
-    ]).map_err(|_| anyhow::anyhow!("Descriptor allocation failed") )?;
+        EpDescriptor::new(EpKind::Humidity, EpFlags::R),
+    ])
+    .map_err(|_| anyhow::anyhow!("Descriptor allocation failed"))?;
 
     // TODO: split service and engine setup better
 
@@ -95,7 +96,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Connect to sensor
     let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
-    let mut scd30 = match Scd30::new(i2c_bus, Delay{}) {
+    let mut scd30 = match Scd30::new(i2c_bus, Delay {}) {
         Ok(d) => d,
         Err(e) => return Err(anyhow::anyhow!("Failed to connect to SCD30: {:?}", e)),
     };
@@ -118,7 +119,7 @@ fn main() -> Result<(), anyhow::Error> {
             std::thread::sleep(Duration::from_millis(100));
             continue;
         }
-                
+
         debug!("Starting sensor read cycle");
 
         // Otherwise, let's get reading!
@@ -126,7 +127,7 @@ fn main() -> Result<(), anyhow::Error> {
             Ok(m) => m,
             Err(e) => {
                 error!("Sensor read error: {:?}, attempting re-initialisation", e);
-                
+
                 if let Err(e) = sensor_init(&opts, &mut scd30) {
                     error!("Failed to reinitalise sensor: {:?}", e);
                 }
@@ -140,7 +141,8 @@ fn main() -> Result<(), anyhow::Error> {
             EpData::new(m.temp.into()),
             EpData::new(m.co2.into()),
             EpData::new(m.rh.into()),
-        ]).map_err(|_| anyhow::anyhow!("Data allocation failed") )?;
+        ])
+        .map_err(|_| anyhow::anyhow!("Data allocation failed"))?;
 
         info!("Measurement: {:?}", data);
 
@@ -148,7 +150,7 @@ fn main() -> Result<(), anyhow::Error> {
         match engine.publish(data, &[]) {
             Ok(sig) => {
                 println!("Published object: {}", sig);
-            },
+            }
             Err(e) => {
                 println!("Failed to publish object: {:?}", e);
             }
@@ -161,14 +163,17 @@ fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn sensor_init(opts: &Config, scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>) -> anyhow::Result<()> {
+fn sensor_init(
+    opts: &Config,
+    scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>,
+) -> anyhow::Result<()> {
     debug!("Applying soft reset");
 
     if let Err(e) = scd30.soft_reset() {
         return Err(anyhow::anyhow!("Failed to soft reset device {:?}", e));
     }
 
-    Delay{}.delay_ms(500u32);
+    Delay {}.delay_ms(500u32);
 
     debug!("Starting continuous mode");
 
@@ -179,7 +184,10 @@ fn sensor_init(opts: &Config, scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>) -
     Ok(())
 }
 
-fn sensor_read(opts: &Config, scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>) -> anyhow::Result<Measurement> {
+fn sensor_read(
+    opts: &Config,
+    scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>,
+) -> anyhow::Result<Measurement> {
     let mut ready = false;
     let mut errors = 0;
 
@@ -189,10 +197,10 @@ fn sensor_read(opts: &Config, scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>) -
             Ok(true) => {
                 ready = true;
                 break;
-            },
+            }
             Ok(false) => {
                 std::thread::sleep(*opts.poll_delay);
-            },
+            }
             Err(e) => {
                 warn!("Error polling for sensor ready: {:?}", e);
                 errors += 1;
@@ -221,7 +229,7 @@ fn sensor_read(opts: &Config, scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>) -
             Err(e) => {
                 warn!("Error reading sensor data: {:?}", e);
                 errors += 1;
-            },
+            }
         }
 
         if errors > opts.allowed_errors {
@@ -230,5 +238,5 @@ fn sensor_read(opts: &Config, scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>) -
         }
     }
 
-    return Err(anyhow::anyhow!("I2C reads failed"))
+    return Err(anyhow::anyhow!("I2C reads failed"));
 }

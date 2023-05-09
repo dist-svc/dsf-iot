@@ -1,4 +1,3 @@
-
 use clap::Parser;
 
 use humantime::Duration;
@@ -7,7 +6,7 @@ use linux_embedded_hal::{self as hal, Delay, I2cdev};
 
 use bme280::BME280;
 
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
@@ -42,7 +41,7 @@ struct Config {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
-    let opts = Config::from_args();
+    let opts = Config::parse();
 
     let filter = EnvFilter::from_default_env()
         .add_directive(format!("dsf_iot={}", opts.log_level).parse().unwrap())
@@ -54,10 +53,6 @@ async fn main() -> Result<(), anyhow::Error> {
     debug!("opts: {:?}", opts);
 
     // Create client connector
-    println!(
-        "Connecting to client socket: '{}'",
-        &opts.daemon_options.daemon_socket
-    );
     let mut c = IotClient::new(&opts.daemon_options).await?;
 
     let service = opts.service.clone();

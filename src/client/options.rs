@@ -5,20 +5,20 @@ use alloc::vec::Vec;
 
 use bytes::BytesMut;
 
-use dsf_core::api::Application;
 use clap::{Parser, Subcommand};
+use dsf_core::api::Application;
 
-use dsf_core::base::{Encode};
-use dsf_core::types::{PageKind};
-use dsf_core::options::Options;
+use dsf_core::base::Encode;
 use dsf_core::keys::Keys;
+use dsf_core::options::Options;
+use dsf_core::types::PageKind;
 
 pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
 use dsf_rpc::ServiceIdentifier;
 
-use crate::endpoint::{self as ep, parse_endpoint_descriptor, parse_endpoint_data, IotData};
+use crate::endpoint::{self as ep, parse_endpoint_data, parse_endpoint_descriptor, IotData};
 use crate::error::IotError;
-use crate::{service::*, IoT};
+use crate::IoT;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
@@ -94,9 +94,9 @@ impl TryInto<dsf_rpc::CreateOptions> for CreateOptions {
 
     // Generate an RPC create message for an IoT service instance
     fn try_into(self) -> Result<dsf_rpc::CreateOptions, Self::Error> {
-        let mut body = BytesMut::new();
-
-        let n = IotService::encode_body(&self.endpoints, &mut body)?;
+        let n = self.endpoints.encode_len()?;
+        let mut body = vec![0u8; n];
+        let n = self.endpoints.encode(&mut body[..])?;
 
         let co = dsf_rpc::CreateOptions {
             application_id: IoT::APPLICATION_ID,
@@ -133,8 +133,7 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
     fn try_into(self) -> Result<dsf_rpc::PublishOptions, Self::Error> {
         let mut body = BytesMut::new();
 
-        let data = IotData::<8>::new(&self.data)
-            .map_err(|_| IotError::Overrun )?;
+        let data = IotData::<8>::new(&self.data).map_err(|_| IotError::Overrun)?;
 
         let n = data.encode(&mut body)?;
 
@@ -184,9 +183,7 @@ pub struct DecodeOptions {
 
 /// IoT Metadata mapping from clap to an options list
 #[derive(Debug, Clone, Parser)]
-pub struct MetaOptions {
-
-}
+pub struct MetaOptions {}
 
 impl Into<Vec<Options>> for MetaOptions {
     fn into(self) -> Vec<Options> {
@@ -195,6 +192,4 @@ impl Into<Vec<Options>> for MetaOptions {
 }
 
 #[derive(Debug, Clone, Parser)]
-pub struct DiscoverOptions {
-
-}
+pub struct DiscoverOptions {}

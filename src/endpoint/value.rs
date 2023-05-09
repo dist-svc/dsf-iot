@@ -1,7 +1,7 @@
-use core::str::FromStr;
+use core::convert::TryFrom;
 use core::fmt::Debug;
 use core::ops::Deref;
-use core::convert::TryFrom;
+use core::{fmt::Display, str::FromStr};
 
 pub trait BytesIsh = AsRef<[u8]> + Debug;
 pub trait StringIsh = AsRef<str> + Debug;
@@ -9,7 +9,6 @@ pub trait StringIsh = AsRef<str> + Debug;
 use heapless::{String, Vec};
 
 use crate::prelude::IotError;
-
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -52,7 +51,6 @@ impl From<&str> for Value {
     }
 }
 
-
 impl TryFrom<&[u8]> for Value {
     type Error = ();
 
@@ -61,15 +59,17 @@ impl TryFrom<&[u8]> for Value {
     }
 }
 
-
-impl core::fmt::Display for Value {
+impl Display for Value {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Value::Text(v) => write!(f, "{}", v.deref()),
-            Value::Int32(v) => write!(f, "{}", v),
-            Value::Float32(v) => write!(f, "{:.02}", v),
-            Value::Bool(v) => write!(f, "{}", v),
-            Value::Bytes(v) => write!(f, "{:02x?}", v),
+            Value::Text(v) => Display::fmt(v, f),
+            Value::Int32(v) => Display::fmt(v, f),
+            Value::Float32(v) => match f.width() {
+                Some(w) => write!(f, "{v:w$.02}"),
+                None => write!(f, "{v:.02}"),
+            },
+            Value::Bool(v) => Display::fmt(v, f),
+            Value::Bytes(v) => write!(f, "{v:02x?}"),
         }
     }
 }

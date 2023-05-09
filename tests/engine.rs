@@ -1,12 +1,12 @@
-use std::net::{UdpSocket, SocketAddr};
+use std::net::{SocketAddr, UdpSocket};
 
+use encdec::EncodeExt;
 use log::info;
-use encdec::{EncodeExt};
 
 use dsf_core::prelude::*;
 use dsf_iot::prelude::*;
 
-use dsf_engine::{engine::{EngineEvent}, store::MemoryStore};
+use dsf_engine::{engine::EngineEvent, store::MemoryStore};
 
 type E = IotEngine<UdpSocket, MemoryStore, 512>;
 
@@ -18,7 +18,6 @@ fn init_color_backtrace() {
 }
 
 fn new_engine(addr: &str, descriptors: Vec<EpDescriptor>) -> anyhow::Result<E> {
-    
     // Create peer for sending requests
     let p = ServiceBuilder::<IotInfo>::generic().build()?;
 
@@ -38,8 +37,7 @@ fn integration() -> anyhow::Result<()> {
     let log_cfg = simplelog::ConfigBuilder::new()
         //.add_filter_ignore_str("dsf_core::wire")
         .build();
-    let _ =
-        simplelog::SimpleLogger::init(simplelog::LevelFilter::Debug, log_cfg);
+    let _ = simplelog::SimpleLogger::init(simplelog::LevelFilter::Debug, log_cfg);
 
     // Setup descriptors
     let descriptors = vec![
@@ -52,11 +50,9 @@ fn integration() -> anyhow::Result<()> {
     let mut e1 = new_engine("127.0.0.1:11000", descriptors.clone())?;
     let mut e2 = new_engine("127.0.0.2:11000", descriptors.clone())?;
 
-
     // Tick engines to get started
     e1.tick()?;
     e2.tick()?;
-
 
     info!("Attempting discovery");
 
@@ -65,7 +61,6 @@ fn integration() -> anyhow::Result<()> {
     let (body, n) = ep_filter.encode_buff::<128>().unwrap();
     e1.discover(&body[..n], &[])?;
 
-    
     // Tick to update discovery state
     e1.tick()?;
     e2.tick()?;
@@ -87,14 +82,14 @@ fn integration() -> anyhow::Result<()> {
 
     e2.tick()?;
 
-
     info!("Publishing data");
 
     let data = IotData::new(&[
         EpData::new(27.3.into()),
         EpData::new(1016.2.into()),
         EpData::new(59.6.into()),
-    ]).unwrap();
+    ])
+    .unwrap();
 
     let sig = e2.publish(data, &[])?;
 

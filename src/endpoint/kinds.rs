@@ -2,26 +2,29 @@ use core::fmt::Write;
 use core::str::FromStr;
 
 #[cfg(feature = "alloc")]
-use alloc::{vec::Vec, string::{String, ToString}};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::prelude::IotError;
 
 /// Available endpoint descriptors, their names, units, and IDs
 pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
-    (1, Kind::Temperature, "temperature",  "°C"     ),
-    (2, Kind::Humidity,    "humidity",     "%RH"    ),
-    (3, Kind::Pressure,    "pressure",     "kPa"    ),
-    (4, Kind::Co2,         "CO2",          "ppm"    ),
-    (5, Kind::State,       "state",        "bool"   ),
-    (6, Kind::Brightness,  "brightness",   "%"      ),
-    (7, Kind::Colour,      "colour",       "rgb"    ),
+    (1, Kind::Temperature, "temperature", "°C"),
+    (2, Kind::Humidity, "humidity", "%RH"),
+    (3, Kind::Pressure, "pressure", "kPa"),
+    (4, Kind::Co2, "CO2", "ppm"),
+    (5, Kind::State, "state", "bool"),
+    (6, Kind::Brightness, "brightness", "%"),
+    (7, Kind::Colour, "colour", "rgb"),
 ];
 
 /// [`Kind`] specifies the type of IoT endpoint, translated using the [`ENDPOINT_KINDS`] table
 /// For example: Temperature, Heart-Rate
 #[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[strum(serialize_all="snake_case")]
+#[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 
 pub enum Kind {
@@ -87,7 +90,10 @@ impl core::str::FromStr for Kind {
     type Err = &'static str;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
-        match ENDPOINT_KINDS.iter().find(|(_i, _k, s, _u)| src.to_lowercase() == *s.to_lowercase()) {
+        match ENDPOINT_KINDS
+            .iter()
+            .find(|(_i, _k, s, _u)| src.to_lowercase() == *s.to_lowercase())
+        {
             Some(e) => Ok(e.1),
             None => Err("No matching endpoint name found"),
         }

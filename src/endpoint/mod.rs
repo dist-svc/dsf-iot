@@ -1,10 +1,8 @@
-
+use byteorder::{ByteOrder, LittleEndian};
+use encdec::{Decode, DecodeOwned, Encode};
 use heapless::Vec;
-use encdec::{Encode, Decode, DecodeOwned};
-use byteorder::{LittleEndian, ByteOrder};
 
-
-use dsf_core::base::{PageBody, DataBody};
+use dsf_core::base::{DataBody, PageBody};
 
 pub mod kinds;
 pub use kinds::*;
@@ -25,19 +23,19 @@ pub struct IotInfo<const N: usize = 8> {
     pub descriptors: Vec<Descriptor, N>,
 }
 
-impl <const N: usize> IotInfo<N> {
+impl<const N: usize> IotInfo<N> {
     /// Create a new [`IotInfo`] object with the provided descriptors
     pub fn new(descriptors: &[Descriptor]) -> Result<Self, ()> {
-        Ok(Self{ 
+        Ok(Self {
             descriptors: Vec::from_slice(descriptors)?,
         })
     }
 }
 
 /// PageBody marker allows this to be used with [`dsf_core::Service::publish_data`]
-impl <const N: usize> PageBody for IotInfo<N> {}
+impl<const N: usize> PageBody for IotInfo<N> {}
 
-impl <const N: usize> core::fmt::Display for IotInfo<N> {
+impl<const N: usize> core::fmt::Display for IotInfo<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for i in 0..self.descriptors.len() {
             let e = &self.descriptors[i];
@@ -47,9 +45,11 @@ impl <const N: usize> core::fmt::Display for IotInfo<N> {
     }
 }
 
-impl <const N: usize> Default for IotInfo<N> {
+impl<const N: usize> Default for IotInfo<N> {
     fn default() -> Self {
-        Self { descriptors: Vec::new() }
+        Self {
+            descriptors: Vec::new(),
+        }
     }
 }
 #[derive(Debug, Encode, DecodeOwned)]
@@ -60,19 +60,18 @@ pub struct IotData<const N: usize = 8> {
     pub data: Vec<Data, N>,
 }
 
-impl <const N: usize> IotData<N> {
+impl<const N: usize> IotData<N> {
     pub fn new(data: &[Data]) -> Result<Self, ()> {
-        Ok(Self{
+        Ok(Self {
             data: Vec::from_slice(data)?,
         })
     }
 }
 
-
 /// DataBody marker allows this to be used with [`dsf_core::Service::publish_data`]
-impl <const N: usize> DataBody for IotData<N> {}
+impl<const N: usize> DataBody for IotData<N> {}
 
-impl <const N: usize> core::fmt::Display for IotData<N> {
+impl<const N: usize> core::fmt::Display for IotData<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for i in 0..self.data.len() {
             let e = &self.data[i];
