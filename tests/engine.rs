@@ -26,7 +26,7 @@ fn new_engine(addr: &str, descriptors: Vec<EpDescriptor>) -> anyhow::Result<E> {
     s.update(&p.id(), |k| *k = p.keys());
 
     // Setup engine with newly created service
-    let e = E::udp(IotInfo::new(&descriptors).unwrap(), addr, s)?;
+    let e = E::udp(IotInfo::new(&descriptors).unwrap(), &[], addr, s)?;
 
     Ok(e)
 }

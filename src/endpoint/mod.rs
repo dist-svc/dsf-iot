@@ -1,4 +1,3 @@
-use byteorder::{ByteOrder, LittleEndian};
 use encdec::{Decode, DecodeOwned, Encode};
 use heapless::Vec;
 
@@ -20,12 +19,12 @@ use crate::prelude::IotError;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[encdec(error = "IotError")]
 pub struct IotInfo<const N: usize = 8> {
-    pub descriptors: Vec<Descriptor, N>,
+    pub descriptors: Vec<EpDescriptor, N>,
 }
 
 impl<const N: usize> IotInfo<N> {
     /// Create a new [`IotInfo`] object with the provided descriptors
-    pub fn new(descriptors: &[Descriptor]) -> Result<Self, ()> {
+    pub fn new(descriptors: &[EpDescriptor]) -> Result<Self, ()> {
         Ok(Self {
             descriptors: Vec::from_slice(descriptors)?,
         })
@@ -57,11 +56,11 @@ impl<const N: usize> Default for IotInfo<N> {
 #[encdec(error = "IotError")]
 pub struct IotData<const N: usize = 8> {
     /// Measurement values (these must correspond with service endpoints)
-    pub data: Vec<Data, N>,
+    pub data: Vec<EpData, N>,
 }
 
 impl<const N: usize> IotData<N> {
-    pub fn new(data: &[Data]) -> Result<Self, ()> {
+    pub fn new(data: &[EpData]) -> Result<Self, ()> {
         Ok(Self {
             data: Vec::from_slice(data)?,
         })

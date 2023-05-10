@@ -32,7 +32,7 @@ pub mod iot_option_kinds {
 bitflags::bitflags! {
     #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
     #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-    pub struct Flags: u16 {
+    pub struct EpFlags: u16 {
         /// Read flag
         const R = 0b0000_0001;
         /// Write flag
@@ -48,27 +48,27 @@ bitflags::bitflags! {
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 
-pub struct Descriptor {
+pub struct EpDescriptor {
     /// Endpoint Kind
-    pub kind: Kind,
+    pub kind: EpKind,
 
     /// Endpoint flags
-    pub flags: Flags,
+    pub flags: EpFlags,
 }
 
-impl Descriptor {
-    pub fn new(kind: Kind, flags: Flags) -> Self {
+impl EpDescriptor {
+    pub fn new(kind: EpKind, flags: EpFlags) -> Self {
         Self { kind, flags }
     }
 }
 
-impl core::fmt::Display for Descriptor {
+impl core::fmt::Display for EpDescriptor {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:16} in {:4}\r\n", self.kind, self.kind.unit())
     }
 }
 
-impl encdec::Encode for Descriptor {
+impl encdec::Encode for EpDescriptor {
     type Error = Error;
 
     fn encode_len(&self) -> Result<usize, Self::Error> {
@@ -93,9 +93,9 @@ impl encdec::Encode for Descriptor {
     }
 }
 
-impl encdec::DecodeOwned for Descriptor {
+impl encdec::DecodeOwned for EpDescriptor {
     type Error = Error;
-    type Output = Descriptor;
+    type Output = EpDescriptor;
 
     fn decode_owned(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         trace!("Parsing: {:x?}", buff);
@@ -112,7 +112,7 @@ impl encdec::DecodeOwned for Descriptor {
         // Parse out endpoint index and kind
         let kind = LittleEndian::read_u16(&buff[4..]).into();
         let flags = LittleEndian::read_u16(&buff[6..]);
-        let flags = Flags::from_bits_truncate(flags);
+        let flags = EpFlags::from_bits_truncate(flags);
 
         // TODO: read metadata
 
@@ -120,28 +120,28 @@ impl encdec::DecodeOwned for Descriptor {
     }
 }
 
-pub fn parse_endpoint_descriptor(src: &str) -> Result<Descriptor, IotError> {
+pub fn parse_endpoint_descriptor(src: &str) -> Result<EpDescriptor, IotError> {
     let kind = parse_endpoint_kind(src)?;
-    Ok(Descriptor::new(kind, Flags::empty()))
+    Ok(EpDescriptor::new(kind, EpFlags::empty()))
 }
 
 /// Endpoint data object contains data associated with a specific endpoint
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Data {
+pub struct EpData {
     // Measurement value
-    pub value: Value,
+    pub value: EpValue,
 }
 
-impl Data {
-    pub fn new(value: Value) -> Self {
+impl EpData {
+    pub fn new(value: EpValue) -> Self {
         Self { value }
     }
 }
 
-impl encdec::DecodeOwned for Data {
+impl encdec::DecodeOwned for EpData {
     type Error = Error;
-    type Output = Data;
+    type Output = EpData;
 
     fn decode_owned(buff: &[u8]) -> Result<(Self::Output, usize), Self::Error> {
         use iot_option_kinds::*;
@@ -151,23 +151,23 @@ impl encdec::DecodeOwned for Data {
         let len = LittleEndian::read_u16(&buff[2..]);
 
         let value = match kind {
-            VALUE_BOOL_FALSE => Value::Bool(false),
-            VALUE_BOOL_TRUE => Value::Bool(true),
+            VALUE_BOOL_FALSE => EpValue::Bool(false),
+            VALUE_BOOL_TRUE => EpValue::Bool(true),
             VALUE_FLOAT => {
                 let f = LittleEndian::read_f32(&buff[4..]);
-                Value::Float32(f)
+                EpValue::Float32(f)
             }
             VALUE_INT => {
                 let f = LittleEndian::read_i32(&buff[4..]);
-                Value::Int32(f)
+                EpValue::Int32(f)
             }
             VALUE_STRING => {
                 let s = core::str::from_utf8(&buff[4..]).unwrap();
-                Value::Text(String::from(s))
+                EpValue::Text(String::from(s))
             }
             VALUE_RAW => {
                 let s = &buff[4..][..len as usize];
-                Value::try_from(s).map_err(|_| Error::InvalidOption)?
+                EpValue::try_from(s).map_err(|_| Error::InvalidOption)?
             }
             _ => {
                 error!("Unrecognised option kind: 0x{:x?}", kind);
@@ -181,18 +181,18 @@ impl encdec::DecodeOwned for Data {
     }
 }
 
-impl encdec::Encode for Data {
+impl encdec::Encode for EpData {
     type Error = Error;
 
     fn encode_len(&self) -> Result<usize, Self::Error> {
         let n = match &self.value {
-            Value::Bool(v) => 4,
-            Value::Float32(_) | Value::Int32(_) => 8,
-            Value::Text(v) => {
+            EpValue::Bool(_) => 4,
+            EpValue::Float32(_) | EpValue::Int32(_) => 8,
+            EpValue::Text(v) => {
                 let b = v.deref().as_bytes();
                 4 + b.len()
             }
-            Value::Bytes(v) => 4 + v.len(),
+            EpValue::Bytes(v) => 4 + v.len(),
         };
 
         Ok(n)
@@ -203,29 +203,29 @@ impl encdec::Encode for Data {
 
         // Write option header and data
         let len = match &self.value {
-            Value::Bool(v) if *v == true => {
+            EpValue::Bool(v) if *v == true => {
                 LittleEndian::write_u16(&mut buff[0..], VALUE_BOOL_TRUE);
                 LittleEndian::write_u16(&mut buff[2..], 0);
                 4
             }
-            Value::Bool(v) if *v == false => {
+            EpValue::Bool(v) if *v == false => {
                 LittleEndian::write_u16(&mut buff[0..], VALUE_BOOL_FALSE);
                 LittleEndian::write_u16(&mut buff[2..], 0);
                 4
             }
-            Value::Float32(v) => {
+            EpValue::Float32(v) => {
                 LittleEndian::write_u16(&mut buff[0..], VALUE_FLOAT);
                 LittleEndian::write_u16(&mut buff[2..], 4);
                 LittleEndian::write_f32(&mut buff[4..], *v);
                 8
             }
-            Value::Int32(v) => {
+            EpValue::Int32(v) => {
                 LittleEndian::write_u16(&mut buff[0..], VALUE_INT);
                 LittleEndian::write_u16(&mut buff[2..], 4);
                 LittleEndian::write_i32(&mut buff[4..], *v);
                 8
             }
-            Value::Text(v) => {
+            EpValue::Text(v) => {
                 let b = v.deref().as_bytes();
 
                 LittleEndian::write_u16(&mut buff[0..], VALUE_STRING);
@@ -233,7 +233,7 @@ impl encdec::Encode for Data {
                 (&mut buff[4..4 + b.len()]).copy_from_slice(b);
                 4 + b.len()
             }
-            Value::Bytes(v) => {
+            EpValue::Bytes(v) => {
                 LittleEndian::write_u16(&mut buff[0..], VALUE_RAW);
                 LittleEndian::write_u16(&mut buff[2..], v.len() as u16);
                 (&mut buff[4..4 + v.len()]).copy_from_slice(&v);
@@ -248,9 +248,9 @@ impl encdec::Encode for Data {
     }
 }
 
-pub fn parse_endpoint_data(src: &str) -> Result<Data, IotError> {
+pub fn parse_endpoint_data(src: &str) -> Result<EpData, IotError> {
     let value = parse_endpoint_value(src)?;
-    Ok(Data::new(value))
+    Ok(EpData::new(value))
 }
 
 #[cfg(test)]
@@ -262,17 +262,17 @@ mod tests {
     #[test]
     fn encode_decode_endpoint_descriptor() {
         let descriptors = vec![
-            Descriptor {
-                kind: Kind::Temperature,
-                flags: Flags::R,
+            EpDescriptor {
+                kind: EpKind::Temperature,
+                flags: EpFlags::R,
             },
-            Descriptor {
-                kind: Kind::Pressure,
-                flags: Flags::W,
+            EpDescriptor {
+                kind: EpKind::Pressure,
+                flags: EpFlags::W,
             },
-            Descriptor {
-                kind: Kind::Humidity,
-                flags: Flags::RW,
+            EpDescriptor {
+                kind: EpKind::Humidity,
+                flags: EpFlags::RW,
             },
         ];
 
@@ -283,7 +283,7 @@ mod tests {
 
             trace!("Encoded {:?} to: {:0x?}", descriptor, &buff[..n]);
 
-            let (d, _n) = Descriptor::decode(&buff[..n]).expect("Decoding error");
+            let (d, _n) = EpDescriptor::decode(&buff[..n]).expect("Decoding error");
 
             assert_eq!(descriptor, &d);
         }
@@ -292,14 +292,14 @@ mod tests {
     #[test]
     fn encode_decode_endpoint_data() {
         let data = vec![
-            Data {
-                value: Value::Bool(true),
+            EpData {
+                value: EpValue::Bool(true),
             },
-            Data {
-                value: Value::Bool(false),
+            EpData {
+                value: EpValue::Bool(false),
             },
-            Data {
-                value: Value::Float32(10.45),
+            EpData {
+                value: EpValue::Float32(10.45),
             },
         ];
 
@@ -310,7 +310,7 @@ mod tests {
 
             trace!("Encoded {:?} to: {:0x?}", d, &buff[..n]);
 
-            let (d1, _n) = Data::decode(&buff[..n]).expect("Decoding error");
+            let (d1, _n) = EpData::decode(&buff[..n]).expect("Decoding error");
 
             assert_eq!(d, &d1);
         }

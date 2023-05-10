@@ -10,14 +10,14 @@ use alloc::{
 use crate::prelude::IotError;
 
 /// Available endpoint descriptors, their names, units, and IDs
-pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
-    (1, Kind::Temperature, "temperature", "°C"),
-    (2, Kind::Humidity, "humidity", "%RH"),
-    (3, Kind::Pressure, "pressure", "kPa"),
-    (4, Kind::Co2, "CO2", "ppm"),
-    (5, Kind::State, "state", "bool"),
-    (6, Kind::Brightness, "brightness", "%"),
-    (7, Kind::Colour, "colour", "rgb"),
+pub const ENDPOINT_KINDS: &[(u16, EpKind, &str, &str)] = &[
+    (1, EpKind::Temperature, "temperature", "°C"),
+    (2, EpKind::Humidity, "humidity", "%RH"),
+    (3, EpKind::Pressure, "pressure", "kPa"),
+    (4, EpKind::Co2, "CO2", "ppm"),
+    (5, EpKind::State, "state", "bool"),
+    (6, EpKind::Brightness, "brightness", "%"),
+    (7, EpKind::Colour, "colour", "rgb"),
 ];
 
 /// [`Kind`] specifies the type of IoT endpoint, translated using the [`ENDPOINT_KINDS`] table
@@ -27,7 +27,7 @@ pub const ENDPOINT_KINDS: &[(u16, Kind, &str, &str)] = &[
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 
-pub enum Kind {
+pub enum EpKind {
     /// Temperature in (degrees Celcius)
     Temperature,
     /// Humidity (in % RH)
@@ -47,24 +47,24 @@ pub enum Kind {
 }
 
 /// Parse an endpoint kind from a string
-pub fn parse_endpoint_kind(src: &str) -> Result<Kind, IotError> {
+pub fn parse_endpoint_kind(src: &str) -> Result<EpKind, IotError> {
     // Coerce to lower case
     let src = src.to_lowercase();
 
     // Attempt to find matching endpoint name
-    if let Ok(v) = Kind::from_str(&src) {
+    if let Ok(v) = EpKind::from_str(&src) {
         return Ok(v);
     }
 
     // Attempt to parse as an integer
     if let Ok(v) = u16::from_str(&src) {
-        return Ok(Kind::Unknown(v));
+        return Ok(EpKind::Unknown(v));
     }
 
     Err(IotError::UnrecognisedEndpoint)
 }
 
-impl Kind {
+impl EpKind {
     /// List available endpoint variants
     pub fn variants() -> String {
         let mut buff = String::new();
@@ -86,7 +86,7 @@ impl Kind {
     }
 }
 
-impl core::str::FromStr for Kind {
+impl core::str::FromStr for EpKind {
     type Err = &'static str;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
@@ -100,19 +100,19 @@ impl core::str::FromStr for Kind {
     }
 }
 
-impl From<u16> for Kind {
+impl From<u16> for EpKind {
     fn from(v: u16) -> Self {
         match ENDPOINT_KINDS.iter().find(|(i, _k, _s, _u)| v == *i) {
             Some(e) => e.1,
-            None => Kind::Unknown(v),
+            None => EpKind::Unknown(v),
         }
     }
 }
 
-impl From<&Kind> for u16 {
-    fn from(kind: &Kind) -> u16 {
+impl From<&EpKind> for u16 {
+    fn from(kind: &EpKind) -> u16 {
         // Handle unknown endpoints
-        if let Kind::Unknown(v) = kind {
+        if let EpKind::Unknown(v) = kind {
             return *v;
         }
 

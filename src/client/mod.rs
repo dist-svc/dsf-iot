@@ -1,27 +1,28 @@
 use core::convert::TryInto;
 
-use dsf_core::wire::Container;
 use futures::prelude::*;
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 
-use encdec::{Decode, Encode, EncodeExt};
+use encdec::EncodeExt;
 
 #[cfg(feature = "alloc")]
 use pretty_hex::*;
 
-use dsf_client::prelude::*;
-use dsf_rpc::{self as rpc, PublishInfo};
+pub use dsf_client::{prelude::*, Config, Error};
 
-use dsf_core::api::{Application, ServiceHandle};
-use dsf_core::prelude::*;
-use dsf_core::types::{DataKind, ServiceKind};
-
-pub use dsf_client::{Config, Error};
 pub use dsf_rpc::ServiceIdentifier;
-use rpc::{DataInfo, ServiceInfo};
+use dsf_rpc::{self as rpc, DataInfo, PublishInfo, ServiceInfo};
+
+use dsf_core::{
+    api::{Application, ServiceHandle},
+    crypto::{Crypto, Hash},
+    prelude::*,
+    types::ServiceKind,
+};
+use rpc::NsRegisterInfo;
 
 use crate::error::IotError;
-use crate::prelude::{EpData, EpDescriptor, EpFlags, EpKind, IotData};
+use crate::prelude::{EpData, EpDescriptor, EpFlags};
 use crate::IoT;
 
 pub mod options;
@@ -99,7 +100,16 @@ impl IotClient {
         Ok(services)
     }
 
-    /// Search for an existing IoT service
+    /// Register an existing service in the database
+    pub async fn register(
+        &mut self,
+        options: RegisterOptions,
+    ) -> Result<dsf_rpc::service::RegisterInfo, IotError> {
+        let r = self.client.register(options).await?;
+        Ok(r)
+    }
+
+    /// Search for an existing IoT service in the database
     pub async fn search(
         &mut self,
         id: &Id,
@@ -174,15 +184,6 @@ impl IotClient {
         Ok(iot_services)
     }
 
-    /// Register an existing service in the database
-    pub async fn register(
-        &mut self,
-        options: RegisterOptions,
-    ) -> Result<dsf_rpc::service::RegisterInfo, IotError> {
-        let r = self.client.register(options).await?;
-        Ok(r)
-    }
-
     /// Fetch service information
     pub async fn info(
         &mut self,
@@ -253,6 +254,19 @@ impl IotClient {
         Ok(r)
     }
 
+    /// Subscribe to data from an IoT service
+    pub async fn subscribe(
+        &mut self,
+        options: rpc::SubscribeOptions,
+    ) -> Result<impl Stream<Item = ()>, ClientError> {
+        debug!("Subscribe to service: {:?}", options);
+
+        let resp = self.client.subscribe(options).await?;
+
+        // TODO: decode endpoint info here
+        Ok(resp.map(|_d| ()))
+    }
+
     /// Query for data from an IoT service
     pub async fn query(
         &mut self,
@@ -292,21 +306,98 @@ impl IotClient {
         Ok((iot_info.0, iot_info.1, iot_data))
     }
 
-    /// Subscribe to data from an IoT service
-    pub async fn subscribe(
+    /// Register an IoT service with the specified nameservice
+    pub async fn ns_register(
         &mut self,
-        options: rpc::SubscribeOptions,
-    ) -> Result<impl Stream<Item = ()>, ClientError> {
-        debug!("Subscribe to service: {:?}", options);
+        opts: NsRegisterOptions,
+    ) -> Result<NsRegisterInfo, IotError> {
+        debug!("Registering service: {:?}", opts.target);
 
-        let resp = self.client.subscribe(options).await?;
+        // Fetch information for services to be registered
+        let (_s, d) = self
+            .info(InfoOptions {
+                service: opts.target.clone().into(),
+            })
+            .await?;
 
-        // TODO: decode endpoint info here
-        Ok(resp.map(|_d| ()))
+        // Generate hashes for endpoints
+        let mut hashes = vec![];
+        if let MaybeEncrypted::Cleartext(eps) = d.body {
+            for e in eps {
+                let v = u16::from(&e.kind);
+                let h = Crypto::hash(&v.to_le_bytes()).unwrap();
+                hashes.push(h);
+            }
+        }
+
+        let options: Vec<_> = d
+            .public_options
+            .iter()
+            .filter(|f| f.filterable())
+            .map(|o| o.clone())
+            .collect();
+
+        debug!("Using hashes: {:?}, options: {:?}", hashes, options);
+
+        debug!("Registering service");
+
+        let r = self
+            .client
+            .ns_register(rpc::NsRegisterOptions {
+                ns: opts.ns,
+                target: opts.target.clone(),
+                name: Some(opts.name),
+                options,
+                hashes,
+            })
+            .await?;
+
+        Ok(r)
+    }
+
+    pub async fn ns_search(
+        &mut self,
+        opts: NsSearchOptions,
+    ) -> Result<Vec<(ServiceInfo, DataInfo<Vec<EpDescriptor>>)>, IotError> {
+        debug!("Searching via nameservice: {:?}", opts.ns);
+
+        // Resolve endpoint kind to hash if required
+        let hash = match opts.endpoint {
+            Some(e) => {
+                let v = u16::from(&e);
+                Some(Crypto::hash(&v.to_le_bytes()).unwrap())
+            }
+            None => None,
+        };
+
+        // Perform search with nameservice
+        let locate_info = self
+            .client
+            .ns_search(rpc::NsSearchOptions {
+                ns: opts.ns,
+                name: opts.name.clone(),
+                options: opts.options.clone(),
+                hash: hash,
+            })
+            .await?;
+
+        // Load information for discovered services
+        let mut services = vec![];
+        for i in &locate_info {
+            let (s, d) = self
+                .info(InfoOptions {
+                    service: ServiceIdentifier::id(i.id.clone()),
+                })
+                .await?;
+
+            services.push((s, d));
+        }
+
+        Ok(services)
     }
 
     pub fn generate() -> Result<(Id, Keys), ClientError> {
-        use dsf_core::crypto::{Crypto, Hash as _, PubKey as _, SecKey as _};
+        use dsf_core::crypto::{Hash as _, PubKey as _, SecKey as _};
 
         let (pub_key, pri_key) = Crypto::new_pk()?;
         let id = Crypto::hash(&pub_key)?;

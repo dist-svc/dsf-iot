@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use bytes::BytesMut;
 
 use clap::{Parser, Subcommand};
-use dsf_core::api::Application;
+use dsf_core::{api::Application, types::Id};
 
 use dsf_core::base::Encode;
 use dsf_core::keys::Keys;
@@ -15,11 +15,14 @@ use dsf_core::types::PageKind;
 
 pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
 use dsf_rpc::ServiceIdentifier;
-use ep::Descriptor;
 
-use crate::endpoint::{self as ep, parse_endpoint_data, parse_endpoint_descriptor, IotData};
-use crate::error::IotError;
-use crate::IoT;
+use crate::{
+    endpoint::{
+        parse_endpoint_data, parse_endpoint_descriptor, EpData, EpDescriptor, EpKind, IotData,
+    },
+    error::IotError,
+    IoT,
+};
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
@@ -58,13 +61,19 @@ pub enum Command {
 
     /// Decode iot data objects
     Decode(DecodeOptions),
+
+    /// Register an IoT service with a Name Service
+    NsRegister(NsRegisterOptions),
+
+    /// Search for an IoT service using a Name Service
+    NsSearch(NsSearchOptions),
 }
 
 #[derive(Debug, Clone, Parser)]
 pub struct CreateOptions {
     /// Service endpoint information
     #[clap(long, value_parser=parse_endpoint_descriptor)]
-    pub endpoints: Vec<ep::Descriptor>,
+    pub endpoints: Vec<EpDescriptor>,
 
     /// Service metadata
     #[clap(long, value_parser=try_parse_key_value)]
@@ -120,7 +129,7 @@ pub struct PublishOptions {
 
     /// Measurement values (these must correspond with service endpoints)
     #[clap(short, long, value_parser=parse_endpoint_data)]
-    pub data: Vec<ep::Data>,
+    pub data: Vec<EpData>,
 
     /// Measurement metadata
     #[clap(long, value_parser=try_parse_key_value)]
@@ -196,9 +205,41 @@ impl Into<Vec<Options>> for MetaOptions {
 pub struct DiscoverOptions {
     /// Endpoints for filtering
     #[clap(long)]
-    pub endpoints: Vec<ep::Kind>,
+    pub endpoints: Vec<EpKind>,
 
     /// Options for filtering
     #[clap(long)]
     pub options: Vec<Options>,
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct NsRegisterOptions {
+    #[clap(flatten)]
+    pub ns: ServiceIdentifier,
+
+    /// IoT service to be registered
+    #[clap()]
+    pub target: Id,
+
+    /// Name for registration
+    #[clap(long)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct NsSearchOptions {
+    #[clap(flatten)]
+    pub ns: ServiceIdentifier,
+
+    /// Service name filter
+    #[clap(long, group = "filters")]
+    pub name: Option<String>,
+
+    /// Endpoint filter
+    #[clap(long, group = "filters")]
+    pub endpoint: Option<EpKind>,
+
+    /// Option filter
+    #[clap(long, group = "filters")]
+    pub options: Option<Options>,
 }

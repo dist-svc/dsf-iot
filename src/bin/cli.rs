@@ -1,12 +1,6 @@
-use std::time::{Duration, Instant};
+use dsf_core::prelude::MaybeEncrypted;
 
-use dsf_core::prelude::{MaybeEncrypted, ServiceBuilder};
-
-use dsf_engine::{
-    engine::{Engine, EngineEvent},
-    store::MemoryStore,
-};
-use dsf_iot::{prelude::*, IotEngine};
+use dsf_iot::prelude::*;
 use dsf_rpc::{DataInfo, ServiceInfo};
 
 use clap::Parser;
@@ -17,8 +11,6 @@ use tracing::{debug, error, info};
 
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::FmtSubscriber;
-
-const BUFF_LEN: usize = 2048;
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -96,12 +88,20 @@ async fn main() -> Result<(), anyhow::Error> {
         Command::Subscribe(o) => {
             let mut res = c.subscribe(o).await?;
 
-            for i in res.next().await {
+            while let Some(i) = res.next().await {
                 info!("{:?}", i);
             }
         }
         Command::Discover(o) => {
             let res = c.discover(o).await?;
+            print_service_list(&res);
+        }
+        Command::NsRegister(o) => {
+            let res = c.ns_register(o).await?;
+            println!("{:?}", res);
+        }
+        Command::NsSearch(o) => {
+            let res = c.ns_search(o).await?;
             print_service_list(&res);
         }
         _ => unreachable!(),
