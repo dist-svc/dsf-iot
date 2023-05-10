@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use clap::Parser;
+use dsf_core::prelude::Options;
 use hal::i2cdev::linux::LinuxI2CError;
 
 use embedded_hal::blocking::delay::DelayMs;
@@ -81,15 +82,24 @@ fn main() -> Result<(), anyhow::Error> {
     ])
     .map_err(|_| anyhow::anyhow!("Descriptor allocation failed"))?;
 
+    let mut options = vec![];
+    if let Some(v) = &opts.name {
+        options.push(Options::name(v));
+    }
+    if let Some(v) = &opts.room {
+        options.push(Options::room(v));
+    }
+
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut engine = match IotEngine::<_, _, 512>::udp(descriptors, "0.0.0.0:10100", store) {
-        Ok(e) => e,
-        Err(e) => {
-            return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));
-        }
-    };
+    let mut engine =
+        match IotEngine::<_, _, 512>::udp(descriptors, &options, "0.0.0.0:10100", store) {
+            Ok(e) => e,
+            Err(e) => {
+                return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));
+            }
+        };
 
     info!("Using service: {:?}", engine.id());
     //info!("Endpoints: {:?}", descriptors);

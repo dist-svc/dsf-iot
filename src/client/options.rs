@@ -15,6 +15,7 @@ use dsf_core::types::PageKind;
 
 pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
 use dsf_rpc::ServiceIdentifier;
+use ep::Descriptor;
 
 use crate::endpoint::{self as ep, parse_endpoint_data, parse_endpoint_descriptor, IotData};
 use crate::error::IotError;
@@ -44,7 +45,7 @@ pub enum Command {
     Subscribe(SubscribeOptions),
 
     /// Query for data from a known IoT service
-    Query(QueryOptions),
+    Data(QueryOptions),
 
     /// List known IoT services
     List(ListOptions),
@@ -192,4 +193,12 @@ impl Into<Vec<Options>> for MetaOptions {
 }
 
 #[derive(Debug, Clone, Parser)]
-pub struct DiscoverOptions {}
+pub struct DiscoverOptions {
+    /// Endpoints for filtering
+    #[clap(long)]
+    pub endpoints: Vec<ep::Kind>,
+
+    /// Options for filtering
+    #[clap(long)]
+    pub options: Vec<Options>,
+}

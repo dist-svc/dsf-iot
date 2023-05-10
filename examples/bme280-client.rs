@@ -14,12 +14,12 @@ use dsf_iot::prelude::*;
 
 #[derive(Debug, Parser)]
 #[clap(name = "DSF IoT BME280 Client")]
-struct Config {
+struct Args {
     #[clap(flatten)]
     service: ServiceIdentifier,
 
     #[clap(flatten)]
-    daemon_options: Options,
+    daemon_options: Config,
 
     #[clap(long, default_value = "/dev/i2c-1")]
     /// Specify the I2C port for the sensor
@@ -41,7 +41,7 @@ struct Config {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
-    let opts = Config::parse();
+    let opts = Args::parse();
 
     let filter = EnvFilter::from_default_env()
         .add_directive(format!("dsf_iot={}", opts.log_level).parse().unwrap())

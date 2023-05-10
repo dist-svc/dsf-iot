@@ -25,12 +25,12 @@ const BUFF_LEN: usize = 2048;
     name = "DSF IoT Client",
     about = "Distributed Service Discovery (DSF) client, used for managing dsf-iot services"
 )]
-struct Config {
+struct Args {
     #[clap(subcommand)]
     cmd: Command,
 
     #[clap(flatten)]
-    client_options: Options,
+    client_options: Config,
 
     #[clap(long, default_value = "info")]
     /// Enable verbose logging
@@ -40,7 +40,7 @@ struct Config {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Fetch arguments
-    let opts = Config::parse();
+    let opts = Args::parse();
 
     // Setup logging
     let _ = FmtSubscriber::builder()
@@ -48,50 +48,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .try_init();
 
     debug!("opts: {:?}", opts);
-
-    // Unconnected commands
-    match &opts.cmd {
-        Command::GenKeys => {
-            println!("Generating keys: ");
-
-            let (id, keys) = IotClient::generate().unwrap();
-
-            println!("ID: {}", id);
-            println!("Public key: {}", keys.pub_key.unwrap());
-            println!("Private key: {}", keys.pri_key.unwrap());
-            println!("Secret key: {}", keys.sec_key.unwrap());
-
-            return Ok(());
-        }
-        Command::Discover(_opts) => {
-            let port = portpicker::pick_unused_port().unwrap();
-
-            // Create transient service
-            let mut engine = IotEngine::<_, _, BUFF_LEN>::udp(
-                IotInfo::new(&[]).unwrap(),
-                format!("0.0.0.0:{}", port),
-                MemoryStore::new(),
-            )?;
-
-            info!("Starting discovery from: {}", engine.id());
-
-            // Issue discover message
-            let req_id = engine.discover(&[], &[])?;
-
-            // Await responses
-            let then = Instant::now();
-            while Instant::now().duration_since(then) < Duration::from_secs(3) {
-                if let EngineEvent::Discover(id) = engine.tick()? {
-                    info!("Discovered service: {:?}", id);
-                }
-            }
-
-            info!("Discovery complete");
-
-            return Ok(());
-        }
-        _ => (),
-    }
 
     // Create client connector
     let mut c = match IotClient::new(&opts.client_options).await {
@@ -133,7 +89,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let res = c.publish(o).await?;
             println!("{:?}", res);
         }
-        Command::Query(o) => {
+        Command::Data(o) => {
             let (service, eps, data) = c.query(o).await?;
             print_service_data(&service, &eps, &data);
         }
@@ -144,6 +100,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 info!("{:?}", i);
             }
         }
+        Command::Discover(o) => {
+            let res = c.discover(o).await?;
+            print_service_list(&res);
+        }
         _ => unreachable!(),
     }
 
@@ -153,6 +113,8 @@ async fn main() -> Result<(), anyhow::Error> {
 fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)]) {
     for (s, d) in services {
         println!("Service ID: {:#}", s.id);
+        println!("Primary page: {:#}", d.signature);
+
         print!("Endpoints: ");
         match &d.body {
             MaybeEncrypted::Cleartext(eps) => {
@@ -161,6 +123,27 @@ fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)]) {
             }
             MaybeEncrypted::Encrypted(_) => println!("ENCRYPTED"),
             MaybeEncrypted::None => println!("None"),
+        }
+
+        match &d.private_options {
+            MaybeEncrypted::Cleartext(options) if options.len() > 0 => {
+                println!("  private_options: ");
+                for o in options {
+                    println!("    - {o:#}");
+                }
+            }
+            MaybeEncrypted::Encrypted(_) => println!("  private_options: Encrypted"),
+            _ => (),
+        };
+
+        print!("  public_options: ");
+        if d.public_options.len() == 0 {
+            println!("Empty")
+        } else {
+            println!("");
+            for o in &d.public_options {
+                println!("    - {o:#}");
+            }
         }
     }
 }

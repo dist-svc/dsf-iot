@@ -4,7 +4,7 @@ use dsf_core::wire::Container;
 use futures::prelude::*;
 use log::{debug, error, info, warn};
 
-use encdec::{Decode, Encode};
+use encdec::{Decode, Encode, EncodeExt};
 
 #[cfg(feature = "alloc")]
 use pretty_hex::*;
@@ -16,12 +16,12 @@ use dsf_core::api::{Application, ServiceHandle};
 use dsf_core::prelude::*;
 use dsf_core::types::{DataKind, ServiceKind};
 
-pub use dsf_client::{Error, Options};
+pub use dsf_client::{Config, Error};
 pub use dsf_rpc::ServiceIdentifier;
-use rpc::{DataInfo, FetchOptions, ServiceInfo};
+use rpc::{DataInfo, ServiceInfo};
 
 use crate::error::IotError;
-use crate::prelude::{EpData, EpDescriptor, IotData};
+use crate::prelude::{EpData, EpDescriptor, EpFlags, EpKind, IotData};
 use crate::IoT;
 
 pub mod options;
@@ -35,8 +35,8 @@ pub struct IotClient {
 
 impl IotClient {
     /// Create a new DSF-IoT client using the provided path
-    pub async fn new(options: &Options) -> Result<Self, IotError> {
-        let client = Client::new(options).await?;
+    pub async fn new(config: &Config) -> Result<Self, IotError> {
+        let client = Client::new(config).await?;
 
         Ok(Self { client })
     }
@@ -59,6 +59,44 @@ impl IotClient {
         debug!("Result: {:?}", r);
 
         Ok(r)
+    }
+
+    /// Discover local IoT services
+    pub async fn discover(
+        &mut self,
+        opts: DiscoverOptions,
+    ) -> Result<Vec<(ServiceInfo, DataInfo<Vec<EpDescriptor>>)>, IotError> {
+        // Build discovery filters
+        let eps: Vec<_> = opts
+            .endpoints
+            .iter()
+            .map(|k| EpDescriptor::new(*k, EpFlags::empty()))
+            .collect();
+        let (body, _) = eps.encode_vec()?;
+
+        // Issue discovery request
+        let locate_info = self
+            .client
+            .discover(rpc::DiscoverOptions {
+                application_id: 1,
+                body: Some(body),
+                filters: opts.options.to_vec(),
+            })
+            .await?;
+
+        // Load information for discovered services
+        let mut services = vec![];
+        for i in &locate_info {
+            let (s, d) = self
+                .info(InfoOptions {
+                    service: ServiceIdentifier::id(i.id.clone()),
+                })
+                .await?;
+
+            services.push((s, d));
+        }
+
+        Ok(services)
     }
 
     /// Search for an existing IoT service
@@ -112,7 +150,7 @@ impl IotClient {
             // Fetch page by signature
             let page_info = self
                 .client
-                .object(FetchOptions {
+                .object(rpc::FetchOptions {
                     service: service_info.id.clone().into(),
                     page_sig: page_sig.clone(),
                 })
@@ -162,7 +200,7 @@ impl IotClient {
         // Lookup page object
         let page_info = self
             .client
-            .object(FetchOptions {
+            .object(rpc::FetchOptions {
                 service: h.into(),
                 page_sig: page_sig.clone(),
             })

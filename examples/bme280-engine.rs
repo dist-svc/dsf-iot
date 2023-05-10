@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 
+use dsf_core::prelude::Options;
 use linux_embedded_hal::{Delay, I2cdev};
 
 use bme280::BME280;
@@ -32,6 +33,14 @@ struct Config {
     /// Specify a period for sensor readings
     period: humantime::Duration,
 
+    #[clap(long)]
+    /// Service name
+    name: Option<String>,
+
+    #[clap(long)]
+    /// Service room
+    room: Option<String>,
+
     #[clap(long, default_value = "info")]
     /// Enable verbose logging
     log_level: LevelFilter,
@@ -61,10 +70,19 @@ fn main() -> Result<(), anyhow::Error> {
     ])
     .unwrap();
 
+    let mut options = vec![];
+    if let Some(v) = &opts.name {
+        options.push(Options::name(v));
+    }
+    if let Some(v) = &opts.room {
+        options.push(Options::room(v));
+    }
+
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut engine = match IotEngine::<_, _, 512>::udp(descriptors, "127.0.0.1:0", store) {
+    let mut engine = match IotEngine::<_, _, 512>::udp(descriptors, &options, "127.0.0.1:0", store)
+    {
         Ok(e) => e,
         Err(e) => {
             return Err(anyhow::anyhow!("Failed to configure engine: {:?}", e));

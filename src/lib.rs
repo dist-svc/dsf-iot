@@ -13,6 +13,7 @@ use dsf_engine::engine::Engine;
 pub mod endpoint;
 pub mod error;
 pub mod prelude;
+use prelude::EpDescriptor;
 
 #[cfg(feature = "client")]
 pub mod client;
@@ -39,15 +40,14 @@ impl Application for IoT {
         }
 
         // Otherwise check for matching endpoint types
-        for e in crate::endpoint::Descriptor::decode_iter(req).filter_map(|d| d.ok()) {
-            if body.descriptors.contains(&e) {
-                log::debug!("Filter match on endpoint: {:?}", e);
-                return true;
+        for e in EpDescriptor::decode_iter(req).filter_map(|d| d.ok()) {
+            if body.descriptors.iter().find(|d| d.kind == e.kind).is_none() {
+                return false;
             }
         }
 
-        // Fall through for no matches
-        return false;
+        // Matched okay
+        return true;
     }
 }
 

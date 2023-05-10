@@ -5,7 +5,7 @@ pub use crate::endpoint::{
 };
 
 #[cfg(feature = "client")]
-pub use crate::client::{options::*, IotClient, Options, ServiceIdentifier};
+pub use crate::client::{options::*, Config, IotClient, ServiceIdentifier};
 
 pub use crate::error::IotError;
 
