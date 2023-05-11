@@ -63,15 +63,15 @@ async fn main() -> Result<(), anyhow::Error> {
         Command::Locate(o) => {
             let (_h, i, e) = c.search(&o.id).await?;
             println!("Located service");
-            print_service_list(&[(i, e)]);
+            print_service_list(&[(i, e)], true);
         }
         Command::Info(o) => {
             let res = c.info(o).await?;
-            print_service_list(&[res]);
+            print_service_list(&[res], true);
         }
         Command::List(o) => {
             let res = c.list(o).await?;
-            print_service_list(&res);
+            print_service_list(&res, false);
         }
         Command::Register(o) => {
             let res = c.register(o).await?;
@@ -94,7 +94,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         Command::Discover(o) => {
             let res = c.discover(o).await?;
-            print_service_list(&res);
+            print_service_list(&res, true);
         }
         Command::NsRegister(o) => {
             let res = c.ns_register(o).await?;
@@ -102,7 +102,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         Command::NsSearch(o) => {
             let res = c.ns_search(o).await?;
-            print_service_list(&res);
+            print_service_list(&res, true);
         }
         _ => unreachable!(),
     }
@@ -110,9 +110,13 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)]) {
+fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)], no_truncate: bool) {
     for (s, d) in services {
-        println!("Service ID: {:#}", s.id);
+        match no_truncate {
+            true => println!("Service ID: {} (index: {})", s.id, s.index),
+            false => println!("Service ID: {:#} (index: {})", s.id, s.index),
+        }
+
         println!("Primary page: {:#}", d.signature);
 
         print!("Endpoints: ");

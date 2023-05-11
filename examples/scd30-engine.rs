@@ -57,7 +57,6 @@ fn main() -> Result<(), anyhow::Error> {
     let opts = Config::parse();
 
     let filter = EnvFilter::from_default_env()
-        .add_directive("sled=warn".parse().unwrap())
         .add_directive("async_std=warn".parse().unwrap())
         .add_directive(opts.log_level.into());
 
@@ -159,7 +158,7 @@ fn main() -> Result<(), anyhow::Error> {
         // Publish new object
         match engine.publish(data, &[]) {
             Ok(sig) => {
-                println!("Published object: {}", sig);
+                println!("Published object: {:#}", sig);
             }
             Err(e) => {
                 println!("Failed to publish object: {:?}", e);

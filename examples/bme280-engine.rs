@@ -25,7 +25,7 @@ struct Config {
     /// Specify the I2C address for the sensor
     i2c_addr: u8,
 
-    #[clap(long, default_value = "scd30.db")]
+    #[clap(long, default_value = "bme280.db")]
     /// Database file for BME280 engine
     database: String,
 
@@ -81,7 +81,7 @@ fn main() -> Result<(), anyhow::Error> {
     // TODO: split service and engine setup better
 
     // Setup engine
-    let mut engine = match IotEngine::<_, _, 512>::udp(descriptors, &options, "127.0.0.1:0", store)
+    let mut engine = match IotEngine::<_, _, 512>::udp(descriptors, &options, "0.0.0.0:10100", store)
     {
         Ok(e) => e,
         Err(e) => {
@@ -126,11 +126,11 @@ fn main() -> Result<(), anyhow::Error> {
 
         // Publish new object
         match engine.publish(data, &[]) {
-            Ok(_) => {
-                println!("Published object: ")
+            Ok(sig) => {
+                println!("Published object: {:#}", sig);
             }
             Err(e) => {
-                println!("Failed to publish object");
+                println!("Failed to publish object: {:?}", e);
             }
         }
 
