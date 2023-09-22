@@ -19,7 +19,7 @@ use dsf_core::{
     prelude::*,
     types::ServiceKind,
 };
-use rpc::NsRegisterInfo;
+use rpc::{NsRegisterInfo, NsSearchInfo};
 
 use crate::error::IotError;
 use crate::prelude::{EpData, EpDescriptor, EpFlags};
@@ -36,7 +36,7 @@ pub struct IotClient {
 
 impl IotClient {
     /// Create a new DSF-IoT client using the provided path
-    pub async fn new(config: &Config) -> Result<Self, IotError> {
+    pub async fn new<C: Into<Config>>(config: C) -> Result<Self, IotError> {
         let client = Client::new(config).await?;
 
         Ok(Self { client })
@@ -119,6 +119,7 @@ impl IotClient {
             .locate(LocateOptions {
                 id: id.clone(),
                 local_only: false,
+                no_persist: false,
             })
             .await?;
 
@@ -136,7 +137,7 @@ impl IotClient {
         &mut self,
         _options: ListOptions,
     ) -> Result<Vec<(ServiceInfo, DataInfo<Vec<EpDescriptor>>)>, IotError> {
-        let req = rpc::service::ListOptions {
+        let req = rpc::service::ServiceListOptions {
             application_id: Some(IoT::APPLICATION_ID),
             kind: Some(ServiceKind::Generic),
         };
@@ -310,11 +311,11 @@ impl IotClient {
     pub async fn ns_register(
         &mut self,
         opts: NsRegisterOptions,
-    ) -> Result<NsRegisterInfo, IotError> {
+    ) -> Result<(NsRegisterInfo, ServiceInfo, DataInfo<Vec<EpDescriptor>>), IotError> {
         debug!("Registering service: {:?}", opts.target);
 
         // Fetch information for services to be registered
-        let (_s, d) = self
+        let (s, d) = self
             .info(InfoOptions {
                 service: opts.target.clone().into(),
             })
@@ -322,7 +323,7 @@ impl IotClient {
 
         // Generate hashes for endpoints
         let mut hashes = vec![];
-        if let MaybeEncrypted::Cleartext(eps) = d.body {
+        if let MaybeEncrypted::Cleartext(eps) = &d.body {
             for e in eps {
                 let v = u16::from(&e.kind);
                 let h = Crypto::hash(&v.to_le_bytes()).unwrap();
@@ -352,13 +353,13 @@ impl IotClient {
             })
             .await?;
 
-        Ok(r)
+        Ok((r, s, d))
     }
 
     pub async fn ns_search(
         &mut self,
         opts: NsSearchOptions,
-    ) -> Result<Vec<(ServiceInfo, DataInfo<Vec<EpDescriptor>>)>, IotError> {
+    ) -> Result<(NsSearchInfo, Vec<(ServiceInfo, DataInfo<Vec<EpDescriptor>>)>), IotError> {
         debug!("Searching via nameservice: {:?}", opts.ns);
 
         // Resolve endpoint kind to hash if required
@@ -378,12 +379,13 @@ impl IotClient {
                 name: opts.name.clone(),
                 options: opts.options.clone(),
                 hash: hash,
+                no_persist: false,
             })
             .await?;
 
         // Load information for discovered services
         let mut services = vec![];
-        for i in &locate_info {
+        for i in &locate_info.matches {
             let (s, d) = self
                 .info(InfoOptions {
                     service: ServiceIdentifier::id(i.id.clone()),
@@ -393,7 +395,7 @@ impl IotClient {
             services.push((s, d));
         }
 
-        Ok(services)
+        Ok((locate_info, services))
     }
 
     pub fn generate() -> Result<(Id, Keys), ClientError> {

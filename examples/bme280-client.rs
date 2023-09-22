@@ -53,7 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
     debug!("opts: {:?}", opts);
 
     // Create client connector
-    let mut c = IotClient::new(&opts.daemon_options).await?;
+    let mut c = IotClient::new(opts.daemon_options).await?;
 
     let service = opts.service.clone();
 

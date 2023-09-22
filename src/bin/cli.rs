@@ -1,7 +1,7 @@
 use dsf_core::prelude::MaybeEncrypted;
 
 use dsf_iot::prelude::*;
-use dsf_rpc::{DataInfo, ServiceInfo};
+use dsf_rpc::{DataInfo, ServiceInfo, RegisterInfo, NsRegisterInfo, NsSearchInfo};
 
 use clap::Parser;
 
@@ -42,7 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
     debug!("opts: {:?}", opts);
 
     // Create client connector
-    let mut c = match IotClient::new(&opts.client_options).await {
+    let mut c = match IotClient::new(opts.client_options.clone()).await {
         Ok(c) => c,
         Err(e) => {
             error!(
@@ -97,12 +97,12 @@ async fn main() -> Result<(), anyhow::Error> {
             print_service_list(&res, true);
         }
         Command::NsRegister(o) => {
-            let res = c.ns_register(o).await?;
-            println!("{:?}", res);
+            let (r, s, d) = c.ns_register(o).await?;
+            print_register_info(r, &s, &d);
         }
         Command::NsSearch(o) => {
-            let res = c.ns_search(o).await?;
-            print_service_list(&res, true);
+            let (i, s) = c.ns_search(o).await?;
+            print_search_info(i, &s);
         }
         _ => unreachable!(),
     }
@@ -110,45 +110,72 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)], no_truncate: bool) {
-    for (s, d) in services {
-        match no_truncate {
-            true => println!("Service ID: {} (index: {})", s.id, s.index),
-            false => println!("Service ID: {:#} (index: {})", s.id, s.index),
-        }
+fn print_register_info(reg: NsRegisterInfo, s: &ServiceInfo, d: &DataInfo<Vec<EpDescriptor>>) {
+    println!("Registered service with ns {:#}", reg.ns);
 
-        println!("Primary page: {:#}", d.signature);
+    if let Some(n) = reg.name {
+        println!("Name: {n}");
+    }
 
-        print!("Endpoints: ");
-        match &d.body {
-            MaybeEncrypted::Cleartext(eps) => {
-                println!("");
-                print_endpoints(&eps)
-            }
-            MaybeEncrypted::Encrypted(_) => println!("ENCRYPTED"),
-            MaybeEncrypted::None => println!("None"),
-        }
+    print_service(s, d, false);
 
-        match &d.private_options {
-            MaybeEncrypted::Cleartext(options) if options.len() > 0 => {
-                println!("  private_options: ");
-                for o in options {
-                    println!("    - {o:#}");
-                }
-            }
-            MaybeEncrypted::Encrypted(_) => println!("  private_options: Encrypted"),
-            _ => (),
-        };
+    println!("TIDs: ");
+    for t in reg.tids {
+        println!("  - {t:#}");
+    }
+}
 
-        print!("  public_options: ");
-        if d.public_options.len() == 0 {
-            println!("Empty")
-        } else {
+fn print_search_info(reg: NsSearchInfo, services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)]) {
+    println!("Search using ns {:#}", reg.ns);
+    println!("TID: {:#}", reg.hash);
+    println!("Matching services: ");
+
+    print_service_list(services, false);
+}
+
+fn print_service(s: &ServiceInfo, d: &DataInfo<Vec<EpDescriptor>>, no_truncate: bool) {
+    match no_truncate {
+        true => println!("Service ID: {} (index: {})", s.id, s.index),
+        false => println!("Service ID: {:#} (index: {})", s.id, s.index),
+    }
+
+    println!("Primary page: {:#}", d.signature);
+
+    print!("Endpoints: ");
+    match &d.body {
+        MaybeEncrypted::Cleartext(eps) => {
             println!("");
-            for o in &d.public_options {
+            print_endpoints(&eps)
+        }
+        MaybeEncrypted::Encrypted(_) => println!("ENCRYPTED"),
+        MaybeEncrypted::None => println!("None"),
+    }
+
+    match &d.private_options {
+        MaybeEncrypted::Cleartext(options) if options.len() > 0 => {
+            println!("  private_options: ");
+            for o in options {
                 println!("    - {o:#}");
             }
         }
+        MaybeEncrypted::Encrypted(_) => println!("  private_options: Encrypted"),
+        _ => (),
+    };
+
+    print!("  public_options: ");
+    if d.public_options.len() == 0 {
+        println!("Empty")
+    } else {
+        println!("");
+        for o in &d.public_options {
+            println!("    - {o:#}");
+        }
+    }
+}
+
+fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)], no_truncate: bool) {
+    for (s, d) in services {
+        print_service(s, d, no_truncate);
     }
 }
 

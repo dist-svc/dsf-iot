@@ -13,7 +13,7 @@ use dsf_core::keys::Keys;
 use dsf_core::options::Options;
 use dsf_core::types::PageKind;
 
-pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions};
+pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions, ServiceListOptions};
 use dsf_rpc::ServiceIdentifier;
 
 use crate::{
@@ -158,10 +158,10 @@ impl TryInto<dsf_rpc::PublishOptions> for PublishOptions {
 }
 
 /// QueryOptions used to fetch data for an IoT service
-pub type QueryOptions = dsf_rpc::data::ListOptions;
+pub type QueryOptions = dsf_rpc::data::DataListOptions;
 
 /// ListOptions used to list known iot services
-pub type ListOptions = dsf_rpc::service::ListOptions;
+pub type ListOptions = dsf_rpc::service::ServiceListOptions;
 
 /// InfoOptions used to fetch info for services
 pub type InfoOptions = dsf_rpc::service::InfoOptions;

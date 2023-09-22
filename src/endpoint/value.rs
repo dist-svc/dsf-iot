@@ -57,6 +57,14 @@ impl TryFrom<&[u8]> for EpValue {
     }
 }
 
+impl <const N: usize> TryFrom<&[u8; N]> for EpValue {
+    type Error = ();
+
+    fn try_from(v: &[u8; N]) -> Result<Self, Self::Error> {
+        Ok(Self::Bytes(Vec::try_from(v.as_slice())?))
+    }
+}
+
 impl Display for EpValue {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
