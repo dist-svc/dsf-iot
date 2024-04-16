@@ -19,7 +19,7 @@ use dsf_core::{
     prelude::*,
     types::ServiceKind,
 };
-use rpc::{NsRegisterInfo, NsSearchInfo};
+use rpc::{NsRegisterInfo, NsSearchInfo, PageBounds};
 
 use crate::error::IotError;
 use crate::prelude::{EpData, EpDescriptor, EpFlags};
@@ -135,11 +135,12 @@ impl IotClient {
     /// List known IoT services
     pub async fn list(
         &mut self,
-        _options: ListOptions,
+        options: ListOptions,
     ) -> Result<Vec<(ServiceInfo, DataInfo<Vec<EpDescriptor>>)>, IotError> {
         let req = rpc::service::ServiceListOptions {
             application_id: Some(IoT::APPLICATION_ID),
             kind: Some(ServiceKind::Generic),
+            bounds: options.bounds,
         };
 
         let services = self.client.list(req).await?;
@@ -159,7 +160,7 @@ impl IotClient {
             };
 
             // Fetch page by signature
-            let page_info = self
+            let (page_info, page) = self
                 .client
                 .object(rpc::FetchOptions {
                     service: service_info.id.clone().into(),
@@ -200,7 +201,7 @@ impl IotClient {
         };
 
         // Lookup page object
-        let page_info = self
+        let (page_info, _page) = self
             .client
             .object(rpc::FetchOptions {
                 service: h.into(),
@@ -295,7 +296,7 @@ impl IotClient {
         // Filter and convert data objects
         let iot_data = data_info
             .drain(..)
-            .filter_map(|i| {
+            .filter_map(|(i, _c)| {
                 if i.kind.is_page() {
                     return None;
                 }

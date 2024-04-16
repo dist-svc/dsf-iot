@@ -63,15 +63,15 @@ async fn main() -> Result<(), anyhow::Error> {
         Command::Locate(o) => {
             let (_h, i, e) = c.search(&o.id).await?;
             println!("Located service");
-            print_service_list(&[(i, e)], true);
+            print_service_list(&[(i, e)]);
         }
         Command::Info(o) => {
             let res = c.info(o).await?;
-            print_service_list(&[res], true);
+            print_service_list(&[res]);
         }
         Command::List(o) => {
             let res = c.list(o).await?;
-            print_service_list(&res, false);
+            print_service_list(&res);
         }
         Command::Register(o) => {
             let res = c.register(o).await?;
@@ -94,7 +94,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         Command::Discover(o) => {
             let res = c.discover(o).await?;
-            print_service_list(&res, true);
+            print_service_list(&res);
         }
         Command::NsRegister(o) => {
             let (r, s, d) = c.ns_register(o).await?;
@@ -117,7 +117,7 @@ fn print_register_info(reg: NsRegisterInfo, s: &ServiceInfo, d: &DataInfo<Vec<Ep
         println!("Name: {n}");
     }
 
-    print_service(s, d, false);
+    print_service(s, d);
 
     println!("TIDs: ");
     for t in reg.tids {
@@ -130,16 +130,13 @@ fn print_search_info(reg: NsSearchInfo, services: &[(ServiceInfo, DataInfo<Vec<E
     println!("TID: {:#}", reg.hash);
     println!("Matching services: ");
 
-    print_service_list(services, false);
+    print_service_list(services);
 }
 
-fn print_service(s: &ServiceInfo, d: &DataInfo<Vec<EpDescriptor>>, no_truncate: bool) {
-    match no_truncate {
-        true => println!("Service ID: {} (index: {})", s.id, s.index),
-        false => println!("Service ID: {:#} (index: {})", s.id, s.index),
-    }
+fn print_service(s: &ServiceInfo, d: &DataInfo<Vec<EpDescriptor>>) {
+    println!("Service ID: {} (short: {})", s.id, s.short_id);
 
-    println!("Primary page: {:#}", d.signature);
+    println!("Primary page: {:#} (index: {})", d.signature, d.index);
 
     print!("Endpoints: ");
     match &d.body {
@@ -173,9 +170,9 @@ fn print_service(s: &ServiceInfo, d: &DataInfo<Vec<EpDescriptor>>, no_truncate: 
     }
 }
 
-fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)], no_truncate: bool) {
+fn print_service_list(services: &[(ServiceInfo, DataInfo<Vec<EpDescriptor>>)]) {
     for (s, d) in services {
-        print_service(s, d, no_truncate);
+        print_service(s, d);
     }
 }
 
@@ -190,8 +187,8 @@ fn print_service_data(
     desc: &DataInfo<Vec<EpDescriptor>>,
     data: &[DataInfo<Vec<EpData>>],
 ) {
-    println!("Service ID: {:#}", service.id);
-    println!("Primary page: {:#}", desc.signature);
+    println!("Service ID: {:#} (short: {})", service.id, service.short_id);
+    println!("Primary page: {:#} (index: {})", desc.signature, desc.index);
 
     print!("Endpoints: ");
     let endpoints = match &desc.body {

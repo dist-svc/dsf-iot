@@ -26,22 +26,22 @@ use crate::{
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
-    /// Create a new IOT service
+    /// Create a new IOT service on this device
     Create(CreateOptions),
 
-    /// Register an IoT service
+    /// Register an owned IoT service
     Register(RegisterOptions),
 
     /// Publish IoT data for an owned service
     Publish(PublishOptions),
 
-    /// Locate an IoT service
+    /// Locate an IoT service by SID using the DHT
     Locate(LocateOptions),
 
-    /// Discover local IoT services
+    /// Discover IoT services on the local network
     Discover(DiscoverOptions),
 
-    /// Fetch IoT service information
+    /// Fetch information for a known IoT service
     Info(InfoOptions),
 
     /// Subscribe to a known IoT service
@@ -56,13 +56,15 @@ pub enum Command {
     /// Generate a service ID / key for manual loading
     GenKeys,
 
-    /// Encode iot data objects
+    /// Helper to encode IoT data objects
+    #[clap(hide=true)]
     Encode(EncodeOptions),
 
-    /// Decode iot data objects
+    /// Helper to decode IoT data objects
+    #[clap(hide=true)]
     Decode(DecodeOptions),
 
-    /// Register an IoT service with a Name Service
+    /// Register an IoT service using a provided Name Service
     NsRegister(NsRegisterOptions),
 
     /// Search for an IoT service using a Name Service
