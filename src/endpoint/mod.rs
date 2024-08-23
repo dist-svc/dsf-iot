@@ -15,7 +15,7 @@ pub use desc::*;
 use crate::prelude::IotError;
 
 /// IoT information object containing endpoint descriptors and service metadata
-#[derive(Debug, Encode, DecodeOwned)]
+#[derive(Debug, PartialEq, Encode, DecodeOwned)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[encdec(error = "IotError")]
 pub struct IotInfo<const N: usize = 8> {
@@ -51,7 +51,8 @@ impl<const N: usize> Default for IotInfo<N> {
         }
     }
 }
-#[derive(Debug, Encode, DecodeOwned)]
+
+#[derive(Debug, PartialEq, Encode, DecodeOwned)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[encdec(error = "IotError")]
 pub struct IotData<const N: usize = 8> {
@@ -64,6 +65,15 @@ impl<const N: usize> IotData<N> {
         Ok(Self {
             data: Vec::from_slice(data)?,
         })
+    }
+}
+
+
+impl<const N: usize> Default for IotData<N> {
+    fn default() -> Self {
+        Self {
+            data: Vec::new(),
+        }
     }
 }
 

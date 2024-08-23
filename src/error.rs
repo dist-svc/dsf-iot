@@ -27,6 +27,9 @@ pub enum IotError {
 
     #[cfg_attr(feature = "thiserror", error("Overrun in static vector"))]
     Overrun,
+
+    #[cfg_attr(feature = "thiserror", error("Invalid encoding"))]
+    InvalidEncoding,
 }
 
 #[cfg(feature = "std")]

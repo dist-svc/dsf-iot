@@ -5,7 +5,7 @@ use clap::Parser;
 use dsf_core::prelude::Options;
 use linux_embedded_hal::{Delay, I2cdev};
 
-use bme280::BME280;
+use bme280::i2c::BME280;
 
 use tracing::{debug, error, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
@@ -93,8 +93,8 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Connect to sensor
     let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
-    let mut bme280 = BME280::new(i2c_bus, opts.i2c_addr, Delay);
-    bme280.init().unwrap();
+    let mut bme280 = BME280::new(i2c_bus, opts.i2c_addr);
+    bme280.init(&mut Delay).unwrap();
 
     let mut last = Instant::now();
 
@@ -113,7 +113,7 @@ fn main() -> Result<(), anyhow::Error> {
         }
 
         // When we've timed out, take measurement
-        let m = bme280.measure().unwrap();
+        let m = bme280.measure(&mut Delay).unwrap();
 
         let data = IotData::new(&[
             EpData::new(m.temperature.into()),
@@ -122,15 +122,15 @@ fn main() -> Result<(), anyhow::Error> {
         ])
         .unwrap();
 
-        println!("Measurement: {:?}", data);
+        info!("Measurement: {:?}", data);
 
         // Publish new object
         match engine.publish(data, &[]) {
             Ok(sig) => {
-                println!("Published object: {:#}", sig);
+                info!("Published object: {:#}", sig);
             }
             Err(e) => {
-                println!("Failed to publish object: {:?}", e);
+                info!("Failed to publish object: {:?}", e);
             }
         }
 

@@ -2,11 +2,11 @@ use clap::Parser;
 
 use humantime::Duration;
 
-use linux_embedded_hal::{self as hal, Delay, I2cdev};
+use linux_embedded_hal::{Delay, I2cdev};
 
-use bme280::BME280;
+use bme280::i2c::BME280;
 
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::FmtSubscriber;
 
@@ -59,7 +59,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let handle = match (&service.index, &service.id) {
         (None, None) => {
-            println!("Creating new BME280 service");
+            info!("Creating new BME280 service");
 
             let s = c
                 .create(CreateOptions {
@@ -75,26 +75,26 @@ async fn main() -> Result<(), anyhow::Error> {
         }
 
         _ => {
-            println!("Connecting to existing service");
+            info!("Connecting to existing service");
             let s = c.base().info(service.into()).await?;
 
-            println!("Located service: {:?}", s.1);
+            info!("Located service: {:?}", s.1);
 
             s.0
         }
     };
 
-    println!("Using service: {:?}", handle.id);
+    info!("Using service: {:?}", handle.id);
 
     // Connect to sensor
     let i2c_bus = I2cdev::new(&opts.i2c_dev).expect("error connecting to i2c bus");
-    let mut bme280 = BME280::new(i2c_bus, opts.i2c_addr, Delay);
-    bme280.init().unwrap();
+    let mut bme280 = BME280::new(i2c_bus, opts.i2c_addr);
+    bme280.init(&mut Delay{}).unwrap();
 
     // Run sensor loop
     loop {
         // Take measurement
-        let m = bme280.measure().unwrap();
+        let m = bme280.measure(&mut Delay).unwrap();
 
         let data = vec![
             EpData::new(m.temperature.into()),
@@ -102,7 +102,7 @@ async fn main() -> Result<(), anyhow::Error> {
             EpData::new(m.humidity.into()),
         ];
 
-        println!("Measurement: {:?}", data);
+        info!("Measurement: {:?}", data);
 
         // Publish new object
         c.publish(PublishOptions {

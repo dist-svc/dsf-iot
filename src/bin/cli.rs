@@ -104,6 +104,17 @@ async fn main() -> Result<(), anyhow::Error> {
             let (i, s) = c.ns_search(o).await?;
             print_search_info(i, &s);
         }
+        Command::GenKeys => {
+            let (id, k) = IotClient::generate()?;
+            info!("id: {id}");
+            info!("public key: {}", k.pub_key.unwrap());
+            info!("private key: {}", k.pri_key.unwrap());
+            info!("secret key: {}", k.sec_key.unwrap());
+        }
+        Command::Control(o) => {
+            let _ = c.control(o).await?;
+            // TODO: wait for update / get updated device state?
+        }
         _ => unreachable!(),
     }
 
@@ -224,7 +235,7 @@ fn print_service_data(
         }
     }
 
-    println!("Data: ");
+    println!("Data ({} objects): ", data.len());
     for d in data {
         println!("Object: {:#} index: {}", d.signature, d.index);
 

@@ -2,10 +2,9 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use dsf_core::prelude::Options;
-use hal::i2cdev::linux::LinuxI2CError;
 
-use embedded_hal::blocking::delay::DelayMs;
-use linux_embedded_hal::{self as hal, Delay, I2cdev};
+use embedded_hal::delay::DelayNs;
+use linux_embedded_hal::{Delay, I2CError, I2cdev};
 
 use sensor_scd30::{Measurement, Scd30};
 
@@ -174,7 +173,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 fn sensor_init(
     opts: &Config,
-    scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>,
+    scd30: &mut Scd30<I2cdev, Delay, I2CError>,
 ) -> anyhow::Result<()> {
     debug!("Applying soft reset");
 
@@ -195,7 +194,7 @@ fn sensor_init(
 
 fn sensor_read(
     opts: &Config,
-    scd30: &mut Scd30<I2cdev, Delay, LinuxI2CError>,
+    scd30: &mut Scd30<I2cdev, Delay, I2CError>,
 ) -> anyhow::Result<Measurement> {
     let mut ready = false;
     let mut errors = 0;

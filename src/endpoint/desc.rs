@@ -25,6 +25,7 @@ pub mod iot_option_kinds {
     pub const VALUE_INT: u16 = 0x0005 | (1 << 15);
     pub const VALUE_STRING: u16 = 0x0006 | (1 << 15);
     pub const VALUE_RAW: u16 = 0x0007 | (1 << 15);
+    pub const VALUE_RGB: u16 = 0x0008 | (1 << 15);
 
     pub const ENDPOINT_DESCRIPTOR_LEN: usize = 4;
 }
@@ -169,6 +170,10 @@ impl encdec::DecodeOwned for EpData {
                 let s = &buff[4..][..len as usize];
                 EpValue::try_from(s).map_err(|_| Error::InvalidOption)?
             }
+            VALUE_RGB => {
+                let u = LittleEndian::read_u32(&buff[4..]);
+                EpValue::Rgb((u >> 16) as u8, (u >> 8) as u8, u as u8)
+            }
             _ => {
                 error!("Unrecognised option kind: 0x{:x?}", kind);
                 return Err(Error::InvalidOption);
@@ -193,6 +198,7 @@ impl encdec::Encode for EpData {
                 4 + b.len()
             }
             EpValue::Bytes(v) => 4 + v.len(),
+            EpValue::Rgb(_, _, _) => 8,
         };
 
         Ok(n)
@@ -238,6 +244,14 @@ impl encdec::Encode for EpData {
                 LittleEndian::write_u16(&mut buff[2..], v.len() as u16);
                 (&mut buff[4..4 + v.len()]).copy_from_slice(&v);
                 4 + v.len()
+            }
+            EpValue::Rgb(r, g, b) => {
+                let u = (*r as u32) << 16 | (*g as u32) << 8 | (*b as u32);
+
+                LittleEndian::write_u16(&mut buff[0..], VALUE_RGB);
+                LittleEndian::write_u16(&mut buff[2..], 4);
+                LittleEndian::write_u32(&mut buff[4..], u);
+                8
             }
             _ => unimplemented!("Encode not yet implemented for value: {:?}", self),
         };
@@ -301,6 +315,9 @@ mod tests {
             EpData {
                 value: EpValue::Float32(10.45),
             },
+            EpData {
+                value: EpValue::Rgb(10, 20, 30),
+            }
         ];
 
         for d in &data {

@@ -4,14 +4,16 @@ use core::convert::TryInto;
 use alloc::vec::Vec;
 
 use bytes::BytesMut;
-
 use clap::{Parser, Subcommand};
-use dsf_core::{api::Application, types::Id};
+use encdec::{EncodeExt};
 
-use dsf_core::base::Encode;
-use dsf_core::keys::Keys;
-use dsf_core::options::Options;
-use dsf_core::types::PageKind;
+use dsf_core::{
+    api::Application, types::Id,
+    base::Encode,
+    keys::Keys,
+    options::Options,
+    types::PageKind,
+};
 
 pub use dsf_rpc::service::{try_parse_key_value, LocateOptions, RegisterOptions, SubscribeOptions, ServiceListOptions};
 use dsf_rpc::ServiceIdentifier;
@@ -69,6 +71,9 @@ pub enum Command {
 
     /// Search for an IoT service using a Name Service
     NsSearch(NsSearchOptions),
+
+    /// Publish a control message for an IoT service
+    Control(ControlOptions),
 }
 
 #[derive(Debug, Clone, Parser)]
@@ -244,4 +249,32 @@ pub struct NsSearchOptions {
     /// Option filter
     #[clap(long, group = "filters")]
     pub options: Option<Options>,
+}
+
+/// Issue a control message for an IoT service
+#[derive(Debug, Clone, Parser)]
+pub struct ControlOptions {
+    #[clap(flatten)]
+    pub target: ServiceIdentifier,
+
+    /// Service endpoint values
+    #[clap(long, value_parser=parse_endpoint_data)]
+    pub data: Vec<EpData>,
+}
+
+impl TryInto<dsf_rpc::ControlWriteOptions> for ControlOptions {
+    type Error = IotError;
+
+    // Generate an RPC create message for an IoT control object
+    fn try_into(self) -> Result<dsf_rpc::ControlWriteOptions, Self::Error> {
+        let (endpoint_data, _) = self.data.encode_vec()?;
+
+        let po = dsf_rpc::ControlWriteOptions {
+            service: self.target,
+            kind: IoT::APPLICATION_ID,
+            data: endpoint_data,
+        };
+
+        Ok(po)
+    }
 }

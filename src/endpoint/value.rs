@@ -11,7 +11,7 @@ use crate::prelude::IotError;
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-
+#[non_exhaustive]
 pub enum EpValue {
     /// Boolean value
     Bool(bool),
@@ -23,6 +23,8 @@ pub enum EpValue {
     Text(String<64>),
     /// Raw data value
     Bytes(Vec<u8, 64>),
+    /// RGB Colour
+    Rgb(u8, u8, u8),
 }
 
 impl From<bool> for EpValue {
@@ -76,10 +78,12 @@ impl Display for EpValue {
             },
             EpValue::Bool(v) => Display::fmt(v, f),
             EpValue::Bytes(v) => write!(f, "{v:02x?}"),
+            EpValue::Rgb(r, g, b) => write!(f, "{r}:{g}:{b}"),
         }
     }
 }
 
+// TODO: probably these would be better represented using prefixes for disambiguation
 impl FromStr for EpValue {
     type Err = IotError;
 
@@ -94,6 +98,19 @@ impl FromStr for EpValue {
         // Then floats
         if let Ok(v) = f32::from_str(src) {
             return Ok(EpValue::Float32(v));
+        }
+
+        // Then integers (with hex?)
+
+        // Then RGB
+        if src.split(':').count() == 3 {
+            let mut s = src.split(':');
+
+            let r = u8::from_str(s.next().unwrap()).map_err(|_| IotError::InvalidEncoding)?;
+            let g = u8::from_str(s.next().unwrap()).map_err(|_| IotError::InvalidEncoding)?;
+            let b = u8::from_str(s.next().unwrap()).map_err(|_| IotError::InvalidEncoding)?;
+
+            return Ok(EpValue::Rgb(r, g, b));
         }
 
         // TODO: then bytes

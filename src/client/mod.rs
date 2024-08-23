@@ -242,6 +242,7 @@ impl IotClient {
         Ok(r)
     }
 
+    /// Publish endpoint data using the specified service
     pub async fn publish(&mut self, options: PublishOptions) -> Result<PublishInfo, IotError> {
         debug!("Publishing data: {:?}", options);
 
@@ -250,6 +251,19 @@ impl IotClient {
         debug!("Encoded service data");
 
         let r = self.client.publish(encoded).await?;
+
+        debug!("Result: {:?}", r);
+
+        Ok(r)
+    }
+
+    /// Issue a control message to the specified service
+    pub async fn control(&mut self, options: ControlOptions) -> Result<DataInfo, IotError> {
+        debug!("Issuing control message: {:?}", options);
+
+        let encoded = options.try_into()?;
+
+        let r = self.client.control(encoded).await?;
 
         debug!("Result: {:?}", r);
 
@@ -292,6 +306,8 @@ impl IotClient {
         debug!("info: {:?}", iot_info);
 
         let mut data_info = self.client.data(options).await?;
+
+        data_info.sort_by_key(|i| i.0.index);
 
         // Filter and convert data objects
         let iot_data = data_info
@@ -357,6 +373,7 @@ impl IotClient {
         Ok((r, s, d))
     }
 
+    /// Search for an IoT service using a specified name server
     pub async fn ns_search(
         &mut self,
         opts: NsSearchOptions,

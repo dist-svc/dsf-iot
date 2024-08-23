@@ -58,21 +58,29 @@ dsf-engine = { version = "0.3.0", default_features = false, features = [ "full" 
 
 
 [dev-dependencies]
-embedded-hal = "0.2.7"
-linux-embedded-hal = "0.3.0"
-bme280 = "0.2.1"
+embedded-hal = "1.0.0"
+linux-embedded-hal = "0.4.0"
+bme280 = "0.5.0"
+blinkt = "0.7.1"
 async-std = { version = "1.4.0", features = [ "attributes" ] }
 simplelog = "0.10.2"
 tracing-subscriber = { version = "0.3.8", features = [ "env-filter" ] }
 
 ctor = "0.1.21"
 color-backtrace = "0.5.1"
-sensor-scd30 = { version = "0.4.0", default_features = false }
+sensor-scd30 = { version = "0.5.0", default_features = false }
 
 
 [[bin]]
 name = "iot-ctl"
 path = "src/bin/cli.rs"
+default = true
+required-features = ["util"]
+
+[[bin]]
+name = "iot-db"
+path = "src/bin/db.rs"
+default = true
 required-features = ["util"]
 
 [[example]]
@@ -81,6 +89,10 @@ required-features = ["util"]
 
 [[example]]
 name = "bme280-engine"
+required-features = ["util"]
+
+[[example]]
+name = "apa102-client"
 required-features = ["util"]
 
 [patch.crates-io]
